@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rudra.smartworktracker.data.entity.Account
@@ -131,9 +133,11 @@ fun AccountDetailScreen(
             )
         }
 
-        if (showSendDialog) {
-            onNavigateToTransfer()
-            showSendDialog = false
+        LaunchedEffect(showSendDialog) {
+            if (showSendDialog) {
+                onNavigateToTransfer()
+                showSendDialog = false
+            }
         }
     }
 }
@@ -246,8 +250,8 @@ fun BalanceHistoryChart(history: List<BalanceHistoryItem>) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "📊 Balance History (Last 7 days)",
+                Text(
+                    text = "Balance History (Last 7 days)",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 )
@@ -415,7 +419,12 @@ fun AccountAmountDialog(
                 )
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) amount = it },
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || (
+                            newValue.all { c -> c.isDigit() || c == '.' } &&
+                            newValue.count { it == '.' } <= 1
+                        )) amount = newValue
+                    },
                     label = { Text("Amount") },
                     prefix = { Text("${CurrencyManager.symbol()} ") },
                     modifier = Modifier.fillMaxWidth(),

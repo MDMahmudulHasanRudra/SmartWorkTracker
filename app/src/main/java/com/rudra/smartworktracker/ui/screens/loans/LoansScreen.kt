@@ -63,7 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rudra.smartworktracker.data.entity.Loan
 import com.rudra.smartworktracker.ui.components.EmptyStateCard
-import java.text.NumberFormat
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -249,7 +249,6 @@ fun LoansScreen(
 
 @Composable
 fun StatisticsCard(stats: LoanStatistics) {
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     Card(
         modifier = Modifier
@@ -302,21 +301,21 @@ fun StatisticsCard(stats: LoanStatistics) {
             ) {
                 EnhancedStatItem(
                     label = "Borrowed",
-                    value = currencyFormat.format(stats.totalBorrowed),
+                    value = CurrencyManager.format(stats.totalBorrowed),
                     color = Color(0xFFF44336),
                     icon = Icons.Default.ArrowBack,
                     modifier = Modifier.weight(1f)
                 )
                 EnhancedStatItem(
                     label = "Lent",
-                    value = currencyFormat.format(stats.totalLent),
+                    value = CurrencyManager.format(stats.totalLent),
                     color = Color(0xFF4CAF50),
                     icon = Icons.Default.Payment,
                     modifier = Modifier.weight(1f)
                 )
                 EnhancedStatItem(
                     label = "Net",
-                    value = currencyFormat.format(stats.netPosition),
+                    value = CurrencyManager.format(stats.netPosition),
                     color = if (stats.netPosition >= 0) Color(0xFF4CAF50) else Color(0xFFF44336),
                     icon = Icons.Default.CheckCircle,
                     modifier = Modifier.weight(1f)
@@ -432,7 +431,6 @@ fun LoanDetailsBottomSheet(
     onDelete: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("dd MMM, yyyy", Locale.getDefault()) }
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -492,8 +490,8 @@ fun LoanDetailsBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                DetailColumn("Initial Amount", currencyFormat.format(loan.initialAmount))
-                DetailColumn("Remaining", currencyFormat.format(loan.remainingAmount))
+                DetailColumn("Initial Amount", CurrencyManager.format(loan.initialAmount))
+                DetailColumn("Remaining", CurrencyManager.format(loan.remainingAmount))
                 DetailColumn("Progress", "${(loan.progress * 100).toInt()}%")
             }
 

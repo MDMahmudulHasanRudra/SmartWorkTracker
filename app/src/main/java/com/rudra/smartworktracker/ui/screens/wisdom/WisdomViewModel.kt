@@ -7,6 +7,7 @@ import com.rudra.smartworktracker.model.Goal
 import com.rudra.smartworktracker.model.GoalCategory
 import com.rudra.smartworktracker.model.Target
 import com.rudra.smartworktracker.model.Wisdom
+import com.rudra.smartworktracker.model.WisdomCategory
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,8 +65,21 @@ class WisdomViewModel : ViewModel() {
         checkStreak()
     }
 
+    private val wisdomQuotes = listOf(
+        Wisdom(text = "The only way to do great work is to love what you do.", author = "Steve Jobs", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "Success is not final, failure is not fatal: it is the courage to continue that counts.", author = "Winston Churchill", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "Innovation distinguishes between a leader and a follower.", author = "Steve Jobs", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "Don't watch the clock; do what it does. Keep going.", author = "Sam Levenson", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "The future depends on what you do today.", author = "Mahatma Gandhi", category = WisdomCategory.HABITS),
+        Wisdom(text = "It does not matter how slowly you go as long as you do not stop.", author = "Confucius", category = WisdomCategory.HABITS),
+        Wisdom(text = "Hard work beats talent when talent doesn't work hard.", author = "Tim Notke", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "Success usually comes to those who are too busy to be looking for it.", author = "Henry David Thoreau", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "The secret of getting ahead is getting started.", author = "Mark Twain", category = WisdomCategory.PRODUCTIVITY),
+        Wisdom(text = "Quality is not an act, it is a habit.", author = "Aristotle", category = WisdomCategory.HABITS)
+    )
+
     fun getWisdom(): List<Wisdom> {
-        return emptyList()
+        return wisdomQuotes.shuffled().take(3)
     }
 
     private fun loadGoals() {

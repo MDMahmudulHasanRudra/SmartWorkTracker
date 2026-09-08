@@ -41,6 +41,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rudra.smartworktracker.data.entity.CreditCard
 import com.rudra.smartworktracker.ui.components.EmptyStateCard
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,8 +131,8 @@ fun CreditCardItem(card: CreditCard, onAddTransactionClick: () -> Unit, onPayBil
         Column(modifier = Modifier.padding(16.dp)) {
             Text("${card.cardName} - **** ${card.cardNumber}", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Limit: ${card.cardLimit}")
-            Text("Balance: ${card.currentBalance}")
+            Text("Limit: ${CurrencyManager.format(card.cardLimit)}")
+            Text("Balance: ${CurrencyManager.format(card.currentBalance)}")
             Text("Statement Date: ${card.statementDate}th")
             Text("Due Date: ${card.dueDate}th")
             Spacer(modifier = Modifier.height(8.dp))

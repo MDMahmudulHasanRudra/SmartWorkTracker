@@ -1,6 +1,5 @@
 package com.rudra.smartworktracker.ui.screens.calculation
 
-import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +33,7 @@ import co.yml.charts.ui.piechart.charts.PieChart
 import co.yml.charts.ui.piechart.models.PieChartConfig
 import co.yml.charts.ui.piechart.models.PieChartData
 import com.rudra.smartworktracker.ui.theme.SmartWorkTrackerTheme
+import com.rudra.smartworktracker.utils.CurrencyManager
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -43,31 +43,11 @@ import java.util.*
 fun CalculationScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val viewModel: CalculationViewModel = viewModel(factory = CalculationViewModelFactory(context))
-    
-    val calculation by viewModel.calculation.collectAsState()
-    val travelExpense by viewModel.travelExpense.collectAsState()
-    val selectedDate by viewModel.selectedDate.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    
-    val mealCostPerWeek by viewModel.mealCostPerWeek.collectAsState()
-    val mealCostPerMonth by viewModel.mealCostPerMonth.collectAsState()
-    val mealCostPerYear by viewModel.mealCostPerYear.collectAsState()
-    
-    val travelCostPerWeek by viewModel.travelCostPerWeek.collectAsState()
-    val travelCostPerMonth by viewModel.travelCostPerMonth.collectAsState()
-    val travelCostPerYear by viewModel.travelCostPerYear.collectAsState()
-    
-    val otherExpensePerMonth by viewModel.otherExpensePerMonth.collectAsState()
-    val otherExpensePerYear by viewModel.otherExpensePerYear.collectAsState()
-    
-    val totalExpensePerMonth by viewModel.totalExpensePerMonth.collectAsState()
-    val totalExpensePerYear by viewModel.totalExpensePerYear.collectAsState()
-    
-    val officeDays by viewModel.officeDays.collectAsState()
-    val homeOfficeDays by viewModel.homeOfficeDays.collectAsState()
-    val pieChartData by viewModel.pieChartData.collectAsState()
-    val monthlyBreakdown by viewModel.monthlyBreakdown.collectAsState()
-    
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val uiState by viewModel.uiState.collectAsState()
+
     val focusManager = LocalFocusManager.current
     val monthYearFormat = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
 
@@ -76,13 +56,13 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
     var otherExpenses by remember { mutableStateOf("") }
     var otherExpenseDescription by remember { mutableStateOf("") }
 
-    LaunchedEffect(calculation, travelExpense) {
-        calculation?.let {
+    LaunchedEffect(uiState.calculation, uiState.travelExpense) {
+        uiState.calculation?.let {
             if (dailyMealRate.toDoubleOrNull() != it.dailyMealRate) {
                 dailyMealRate = it.dailyMealRate.toString()
             }
         }
-        travelExpense?.let {
+        uiState.travelExpense?.let {
             if (dailyTravelCost.toDoubleOrNull() != it.dailyTravelCost) {
                 dailyTravelCost = it.dailyTravelCost.toString()
             }
@@ -97,12 +77,13 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         viewModel.errorMessage.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            snackbarHostState.showSnackbar(message)
         }
     }
 
     SmartWorkTrackerTheme {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -125,7 +106,7 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
                     actions = {
-                        if (isLoading) {
+                        if (uiState.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp
@@ -144,8 +125,8 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                 }
             },
             modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-        ) { paddingValues ->
-            if (isLoading && calculation == null) {
+            ) { paddingValues ->
+                if (uiState.isLoading && uiState.calculation == null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -165,26 +146,26 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                 ) {
                     item {
                         MonthNavigator(
-                            month = monthYearFormat.format(selectedDate),
+                            month = monthYearFormat.format(uiState.selectedDate),
                             onPrevious = { viewModel.goToPreviousMonth() },
                             onNext = { viewModel.goToNextMonth() },
-                            isLoading = isLoading
+                            isLoading = uiState.isLoading
                         )
                     }
 
                     item {
                         SummaryHeaderCard(
-                            officeDays = officeDays,
-                            homeOfficeDays = homeOfficeDays,
-                            totalCost = totalExpensePerMonth,
-                            isLoading = isLoading
+                            officeDays = uiState.officeDays,
+                            homeOfficeDays = uiState.homeOfficeDays,
+                            totalCost = uiState.totalExpensePerMonth,
+                            isLoading = uiState.isLoading
                         )
                     }
 
                     item {
-                        if (monthlyBreakdown.isNotEmpty()) {
+                        if (uiState.monthlyBreakdown.isNotEmpty()) {
                             MonthlyBreakdownChart(
-                                data = monthlyBreakdown,
+                                data = uiState.monthlyBreakdown,
                                 year = viewModel.getCurrentYear()
                             )
                         }
@@ -215,11 +196,11 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                     }
 
                     item {
-                        val totalDays = officeDays + homeOfficeDays
+                        val totalDays = uiState.officeDays + uiState.homeOfficeDays
                         if (totalDays > 0) {
                             WorkingDaysPieChart(
-                                data = pieChartData,
-                                isLoading = isLoading
+                                data = uiState.pieChartData,
+                                isLoading = uiState.isLoading
                             )
                         } else {
                             NoDataPlaceholder(
@@ -236,9 +217,9 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                             icon = Icons.Default.Restaurant,
                             color = MaterialTheme.colorScheme.primary,
                             items = listOf(
-                                "Weekly" to String.format("%.2f Taka", mealCostPerWeek),
-                                "Monthly" to String.format("%.2f Taka", mealCostPerMonth),
-                                "Yearly" to String.format("%.2f Taka", mealCostPerYear)
+                                "Weekly" to CurrencyManager.format(uiState.mealCostPerWeek),
+                                "Monthly" to CurrencyManager.format(uiState.mealCostPerMonth),
+                                "Yearly" to CurrencyManager.format(uiState.mealCostPerYear)
                             )
                         )
                     }
@@ -249,11 +230,11 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                             icon = Icons.Default.DirectionsCar,
                             color = Color(0xFF388E3C),
                             items = listOf(
-                                "Weekly Travel" to String.format("%.2f Taka", travelCostPerWeek),
-                                "Monthly Travel" to String.format("%.2f Taka", travelCostPerMonth),
-                                "Yearly Travel" to String.format("%.2f Taka", travelCostPerYear),
-                                "Monthly Other" to String.format("%.2f Taka", otherExpensePerMonth),
-                                "Yearly Other" to String.format("%.2f Taka", otherExpensePerYear)
+                                "Weekly Travel" to CurrencyManager.format(uiState.travelCostPerWeek),
+                                "Monthly Travel" to CurrencyManager.format(uiState.travelCostPerMonth),
+                                "Yearly Travel" to CurrencyManager.format(uiState.travelCostPerYear),
+                                "Monthly Other" to CurrencyManager.format(uiState.otherExpensePerMonth),
+                                "Yearly Other" to CurrencyManager.format(uiState.otherExpensePerYear)
                             )
                         )
                     }
@@ -264,8 +245,8 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
                             icon = Icons.Default.Calculate,
                             color = MaterialTheme.colorScheme.error,
                             items = listOf(
-                                "Total Monthly" to String.format("%.2f Taka", totalExpensePerMonth),
-                                "Total Yearly" to String.format("%.2f Taka", totalExpensePerYear)
+                                "Total Monthly" to CurrencyManager.format(uiState.totalExpensePerMonth),
+                                "Total Yearly" to CurrencyManager.format(uiState.totalExpensePerYear)
                             )
                         )
                     }
@@ -487,9 +468,9 @@ fun ExpenseInputSection(
                         value = dailyMealRate,
                         onValueChange = onDailyMealRateChange,
                         label = { Text("Amount in Taka") },
-                        leadingIcon = { 
+                        leadingIcon = {
                             Text(
-                                text = "৳",
+                                text = CurrencyManager.symbol(),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(start = 8.dp)
@@ -557,7 +538,7 @@ fun ExpenseInputSection(
                         label = { Text("Daily Travel Cost") },
                         leadingIcon = { 
                             Text(
-                                text = "৳",
+                                text = CurrencyManager.symbol(),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(start = 8.dp)
@@ -584,7 +565,7 @@ fun ExpenseInputSection(
                                 label = { Text("Monthly Other Expenses") },
                                 leadingIcon = { 
                                     Text(
-                                        text = "৳",
+                                        text = CurrencyManager.symbol(),
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(start = 8.dp)
@@ -687,7 +668,7 @@ fun SummaryHeaderCard(officeDays: Int, homeOfficeDays: Int, totalCost: Double, i
                 SummaryItem("Office", "$officeDays days")
                 SummaryItem("Home", "$homeOfficeDays days")
                 SummaryItem("Total", "${officeDays + homeOfficeDays} days")
-                SummaryItem("Total Cost", String.format("%.0f ৳", totalCost), isCost = true)
+                SummaryItem("Total Cost", CurrencyManager.format(totalCost), isCost = true)
             }
         }
     }

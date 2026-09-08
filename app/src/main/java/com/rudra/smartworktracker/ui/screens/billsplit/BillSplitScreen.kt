@@ -46,9 +46,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.rudra.smartworktracker.data.entity.BillSplit
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,7 +141,7 @@ fun BillSplitItem(
     onMarkSettled: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, yyyy") }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -170,7 +171,7 @@ fun BillSplitItem(
                 }
             }
             Text(
-                "Total: $${String.format("%.2f", billSplit.totalAmount)}",
+                "Total: ${CurrencyManager.format(billSplit.totalAmount)}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -184,7 +185,7 @@ fun BillSplitItem(
             if (billSplit.amounts.isNotEmpty()) {
                 Text(
                     billSplit.participants.zip(billSplit.amounts).joinToString(", ") { (name, amt) ->
-                        "$name: ${String.format("%.2f", amt)}"
+                        "$name: ${CurrencyManager.format(amt)}"
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
@@ -192,7 +193,7 @@ fun BillSplitItem(
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                dateFormat.format(Date(billSplit.createdAt)),
+                Instant.ofEpochMilli(billSplit.createdAt).atZone(ZoneId.systemDefault()).format(dateFormatter),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )

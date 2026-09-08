@@ -118,7 +118,9 @@ fun ExpenseEntryForm(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = amount,
-            onValueChange = onAmountChange,
+            onValueChange = { newValue ->
+                if (newValue.isEmpty() || (newValue.all { it.isDigit() || it == '.' } && newValue.count { it == '.' } <= 1)) onAmountChange(newValue)
+            },
             label = { Text("Amount") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -193,7 +195,9 @@ fun MealEntryForm(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = amount,
-            onValueChange = onAmountChange,
+            onValueChange = { newValue ->
+                if (newValue.isEmpty() || (newValue.all { it.isDigit() || it == '.' } && newValue.count { it == '.' } <= 1)) onAmountChange(newValue)
+            },
             label = { Text("Amount") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()

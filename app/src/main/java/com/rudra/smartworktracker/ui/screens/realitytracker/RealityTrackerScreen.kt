@@ -38,6 +38,11 @@ fun RealityTrackerScreen(
     var showAddDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Reality Tracker", fontWeight = FontWeight.Bold) }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
@@ -53,15 +58,6 @@ fun RealityTrackerScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            item {
-                Text(
-                    text = "Reality Tracker",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
-
             item {
                 TimeRangeSelector(
                     selectedRange = selectedRange,

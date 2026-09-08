@@ -23,7 +23,6 @@ import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.icon
 import com.rudra.smartworktracker.utils.CurrencyManager
 import java.util.Calendar
-import java.util.Locale
 
 @Composable
 fun NetWorthCard(netWorth: Double) {
@@ -371,10 +370,6 @@ private fun getGreeting(): String {
         hour < 17 -> "☀️ Good afternoon"
         else -> "🌙 Good evening"
     }
-}
-
-fun formatAmount(amount: Double): String {
-    return String.format(Locale.getDefault(), "%,.0f", amount)
 }
 
 fun maskAccountNumber(number: String): String {

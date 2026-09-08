@@ -97,11 +97,6 @@ class AccountsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun canDeleteAccount(accountId: Long): Boolean {
-        val account = _uiState.value.accounts.find { it.id == accountId }
-        return account?.balance == 0.0
-    }
-
     fun createAccount(
         name: String,
         type: AccountCategory,

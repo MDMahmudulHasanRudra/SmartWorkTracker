@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.rudra.smartworktracker.data.entity.AccountType
 import com.rudra.smartworktracker.data.entity.Emi
 import com.rudra.smartworktracker.data.entity.Loan
-import java.text.NumberFormat
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -265,7 +265,6 @@ fun AddEmiBottomSheet(
 fun PayEmiDialog(emiWithLoan: EmiWithLoan, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val emi = emiWithLoan.emi
     val loan = emiWithLoan.loan
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -276,17 +275,17 @@ fun PayEmiDialog(emiWithLoan: EmiWithLoan, onDismiss: () -> Unit, onConfirm: () 
                     Text("Loan: ${it.personName}", fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("EMI Amount: ${currencyFormat.format(emi.amount)}")
-                Text("Principal: ${currencyFormat.format(emi.principalAmount)}")
+                Text("EMI Amount: ${CurrencyManager.format(emi.amount)}")
+                Text("Principal: ${CurrencyManager.format(emi.principalAmount)}")
                 if (emi.interestAmount > 0) {
-                    Text("Interest: ${currencyFormat.format(emi.interestAmount)}")
+                    Text("Interest: ${CurrencyManager.format(emi.interestAmount)}")
                 }
                 if (emi.penaltyAmount > 0) {
-                    Text("Penalty: ${currencyFormat.format(emi.penaltyAmount)}", color = MaterialTheme.colorScheme.error)
+                    Text("Penalty: ${CurrencyManager.format(emi.penaltyAmount)}", color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Total Payable: ${currencyFormat.format(emi.totalPayable)}",
+                    "Total Payable: ${CurrencyManager.format(emi.totalPayable)}",
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )

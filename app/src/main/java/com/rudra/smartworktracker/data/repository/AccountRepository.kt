@@ -232,11 +232,6 @@ class AccountRepository(private val accountDao: AccountDao) {
         return DeleteResult.Success
     }
 
-    fun canDeleteAccount(accountId: Long, accounts: List<Account>): Boolean {
-        val account = accounts.find { it.id == accountId } ?: return false
-        return account.balance == 0.0
-    }
-
     suspend fun addIncomeToAccount(accountId: Long, amount: Double) {
         val account = accountDao.getAccountById(accountId)
         account?.let {

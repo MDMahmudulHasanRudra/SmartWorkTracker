@@ -534,7 +534,7 @@ fun SavingsHistoryItem(savings: Savings, onDelete: (Savings) -> Unit = {}) {
                 )
             }
             Text(
-                text = String.format("৳ %.2f", kotlin.math.abs(savings.amount)),
+                text = CurrencyManager.format(kotlin.math.abs(savings.amount)),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = if (savings.amount >= 0) MaterialTheme.colorScheme.primary
@@ -574,7 +574,7 @@ fun SavingsStatsCards(stats: SavingsStats) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "৳ ${String.format("%.0f", stats.totalDeposits)}",
+                    CurrencyManager.format(stats.totalDeposits),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -587,7 +587,7 @@ fun SavingsStatsCards(stats: SavingsStats) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "৳ ${String.format("%.0f", stats.totalWithdrawals)}",
+                    CurrencyManager.format(stats.totalWithdrawals),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.error
@@ -630,7 +630,7 @@ fun AddTransactionDialog(
                             amount = it
                         }
                     },
-                    label = { Text("Amount (৳)") },
+                    label = { Text("Amount (${CurrencyManager.symbol()})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

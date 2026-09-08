@@ -49,6 +49,7 @@ import com.rudra.smartworktracker.data.entity.AccountType
 import com.rudra.smartworktracker.data.entity.Loan
 import com.rudra.smartworktracker.data.entity.LoanCategory
 import com.rudra.smartworktracker.data.entity.LoanType
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -390,7 +391,7 @@ fun RepayLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Double) -> Un
         text = {
             Column {
                 Text("For loan with ${loan.personName}")
-                Text("Remaining: ${loan.remainingAmount}", style = MaterialTheme.typography.bodySmall)
+                Text("Remaining: ${CurrencyManager.format(loan.remainingAmount)}", style = MaterialTheme.typography.bodySmall)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = amount,

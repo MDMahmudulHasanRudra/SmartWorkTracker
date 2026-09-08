@@ -17,11 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
-import java.text.NumberFormat
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun StatisticsCard(stats: EmiStatistics) {
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     Card(
         modifier = Modifier
@@ -74,14 +73,14 @@ fun StatisticsCard(stats: EmiStatistics) {
             ) {
                 EnhancedEmiStatItem(
                     label = "Pending",
-                    value = currencyFormat.format(stats.totalPending),
+                    value = CurrencyManager.format(stats.totalPending),
                     color = Color(0xFFFF9800),
                     icon = Icons.Default.Payment,
                     modifier = Modifier.weight(1f)
                 )
                 EnhancedEmiStatItem(
                     label = "This Month",
-                    value = currencyFormat.format(stats.thisMonthTotal),
+                    value = CurrencyManager.format(stats.thisMonthTotal),
                     color = Color(0xFF2196F3),
                     icon = Icons.Default.CalendarMonth,
                     modifier = Modifier.weight(1f)
@@ -115,7 +114,7 @@ fun StatisticsCard(stats: EmiStatistics) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Penalty Collected: ${currencyFormat.format(stats.totalPenaltyCollected)}",
+                        "Penalty Collected: ${CurrencyManager.format(stats.totalPenaltyCollected)}",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF4CAF50)
                     )

@@ -13,13 +13,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,38 +44,54 @@ import nl.dionsegijn.konfetti.core.Position
 import nl.dionsegijn.konfetti.core.emitter.Emitter
 import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AchievementsScreen(viewModel: AchievementsViewModel = viewModel()) {
+fun AchievementsScreen(
+    onNavigateBack: () -> Unit = {},
+    viewModel: AchievementsViewModel = viewModel()
+) {
     val achievements by viewModel.achievements.collectAsState()
     val newlyUnlocked by viewModel.newlyUnlockedAchievement.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (achievements.isEmpty()) {
-            EmptyStateCard(
-                icon = Icons.Default.EmojiEvents,
-                title = "No achievements yet",
-                message = "Complete tasks and build habits to unlock achievements!",
-                modifier = Modifier.padding(16.dp)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Achievements", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
             )
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(achievements) { achievement ->
-                    AchievementItem(achievement = achievement)
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            if (achievements.isEmpty()) {
+                EmptyStateCard(
+                    icon = Icons.Default.EmojiEvents,
+                    title = "No achievements yet",
+                    message = "Complete tasks and build habits to unlock achievements!",
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(achievements) { achievement ->
+                        AchievementItem(achievement = achievement)
+                    }
                 }
             }
-        }
 
-        if (newlyUnlocked != null) {
-            KonfettiView(
-                modifier = Modifier.fillMaxSize(),
-                parties = remember { listOf(party) },
-                // The listener was incorrect, this is the proper way to know when it is finished
-            )
+            if (newlyUnlocked != null) {
+                KonfettiView(
+                    modifier = Modifier.fillMaxSize(),
+                    parties = remember { listOf(party) },
+                )
+            }
         }
     }
 }

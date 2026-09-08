@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rudra.smartworktracker.data.entity.Loan
 import com.rudra.smartworktracker.data.entity.LoanType
-import java.text.NumberFormat
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,7 +57,6 @@ fun LoanCard(
     onDeleteClick: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("dd MMM, yyyy", Locale.getDefault()) }
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     val cardColor by animateColorAsState(
         targetValue = when {
@@ -164,7 +163,7 @@ fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        currencyFormat.format(loan.remainingAmount),
+                        CurrencyManager.format(loan.remainingAmount),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (loan.loanType == LoanType.BORROWED) MaterialTheme.colorScheme.error
@@ -178,7 +177,7 @@ fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        currencyFormat.format(loan.initialAmount),
+                        CurrencyManager.format(loan.initialAmount),
                         style = MaterialTheme.typography.titleMedium
                     )
                 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
 import com.rudra.smartworktracker.data.entity.Savings
 import com.rudra.smartworktracker.data.repository.SavingsRepository
+import com.rudra.smartworktracker.utils.CurrencyManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -189,7 +190,7 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         viewModelScope.launch {
             try {
                 savingsRepository.addToSavings(amount, note)
-                _uiState.value = _uiState.value.copy(successMessage = "Successfully added ৳$amount")
+                _uiState.value = _uiState.value.copy(successMessage = "Successfully added ${CurrencyManager.format(amount)}")
                 clearMessages()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = "Failed to add savings: ${e.message}")
@@ -211,7 +212,7 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         viewModelScope.launch {
             try {
                 savingsRepository.withdrawFromSavings(amount, note)
-                _uiState.value = _uiState.value.copy(successMessage = "Successfully withdrew ৳$amount")
+                _uiState.value = _uiState.value.copy(successMessage = "Successfully withdrew ${CurrencyManager.format(amount)}")
                 clearMessages()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = "Failed to withdraw: ${e.message}")

@@ -19,7 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.text.NumberFormat
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +34,6 @@ fun EmiCard(
     val emi = emiWithLoan.emi
     val loan = emiWithLoan.loan
     val dateFormat = remember { SimpleDateFormat("dd MMM, yyyy", Locale.getDefault()) }
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance() }
 
     val cardColor by animateColorAsState(
         targetValue = when (emi.status) {
@@ -116,7 +115,7 @@ fun EmiCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        currencyFormat.format(emi.amount),
+                        CurrencyManager.format(emi.amount),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -128,7 +127,7 @@ fun EmiCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        currencyFormat.format(emi.principalAmount),
+                        CurrencyManager.format(emi.principalAmount),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -139,7 +138,7 @@ fun EmiCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        currencyFormat.format(emi.interestAmount),
+                        CurrencyManager.format(emi.interestAmount),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -148,7 +147,7 @@ fun EmiCard(
             if (emi.penaltyAmount > 0) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Penalty: ${currencyFormat.format(emi.penaltyAmount)}",
+                    "Penalty: ${CurrencyManager.format(emi.penaltyAmount)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error
                 )
