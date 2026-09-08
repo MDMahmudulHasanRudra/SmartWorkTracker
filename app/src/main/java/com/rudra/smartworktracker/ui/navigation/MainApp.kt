@@ -2,11 +2,34 @@ package com.rudra.smartworktracker.ui.navigation
 
 import android.content.Context
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.AccountBalance
@@ -20,8 +43,11 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterCenterFocus
@@ -44,31 +70,45 @@ import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -175,27 +215,234 @@ fun MainApp() {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
-                Spacer(Modifier.height(12.dp))
-                navigationItems.forEach { item ->
-                    NavigationDrawerItem(
-                        icon = { Icon(item.icon, contentDescription = item.title) },
-                        label = { Text(item.title) },
-                        selected = item.route == currentRoute,
-                        onClick = {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+            ModalDrawerSheet(
+                modifier = Modifier.width(300.dp)
+            ) {
+                val sections = remember {
+                    mutableStateMapOf(
+                        "Core" to true,
+                        "Finance" to true,
+                        "Productivity" to true,
+                        "Wellness" to true,
+                        "System" to false
                     )
+                }
+
+                val sectionItems = mapOf(
+                    "Core" to listOf(
+                        NavigationItem.Dashboard,
+                        NavigationItem.AddEntry,
+                        NavigationItem.Reports,
+                        NavigationItem.Journal,
+                        NavigationItem.WorkTimer,
+                        NavigationItem.Focus
+                    ),
+                    "Finance" to listOf(
+                        NavigationItem.Expense,
+                        NavigationItem.Income,
+                        NavigationItem.Accounts,
+                        NavigationItem.Transfer,
+                        NavigationItem.Savings,
+                        NavigationItem.Loans,
+                        NavigationItem.EMI,
+                        NavigationItem.CreditCard,
+                        NavigationItem.FinancialStatement,
+                        NavigationItem.Calculation,
+                        NavigationItem.BillSplit,
+                        NavigationItem.SpendAdvisor
+                    ),
+                    "Productivity" to listOf(
+                        NavigationItem.Calendar,
+                        NavigationItem.Analytics,
+                        NavigationItem.MonthlyReport,
+                        NavigationItem.Recurring,
+                        NavigationItem.Scheduler,
+                        NavigationItem.Overtime,
+                        NavigationItem.Team
+                    ),
+                    "Wellness" to listOf(
+                        NavigationItem.Health,
+                        NavigationItem.Habit,
+                        NavigationItem.Achievements,
+                        NavigationItem.MindfulBreak,
+                        NavigationItem.Wisdom,
+                        NavigationItem.RealityTracker,
+                        NavigationItem.FutureImpact
+                    ),
+                    "System" to listOf(
+                        NavigationItem.Settings,
+                        NavigationItem.Backup,
+                        NavigationItem.UserProfile,
+                        NavigationItem.AllFunsion
+                    )
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                                .padding(horizontal = 24.dp, vertical = 20.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(48.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shadowElevation = 2.dp
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Profile",
+                                        modifier = Modifier
+                                            .padding(10.dp)
+                                            .size(28.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "Smart Work Tracker",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Track, plan, grow",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+
+                    sections.forEach { (sectionTitle, _) ->
+                        val expanded = sections[sectionTitle] ?: true
+
+                        item(key = "header_$sectionTitle") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { sections[sectionTitle] = !expanded }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = sectionTitle.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 1.2.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (expanded) "Collapse" else "Expand",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (expanded) {
+                            itemsIndexed(
+                                items = sectionItems[sectionTitle] ?: emptyList(),
+                                key = { _, item -> item.route }
+                            ) { _, item ->
+                                val isSelected = item.route == currentRoute
+                                val bgColor by animateColorAsState(
+                                    targetValue = if (isSelected)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        Color.Transparent,
+                                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                    label = "drawerBg"
+                                )
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 1.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            navController.navigate(item.route) {
+                                                popUpTo(navController.graph.startDestinationId) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                            scope.launch { drawerState.close() }
+                                        },
+                                    color = bgColor
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = item.icon,
+                                            contentDescription = item.title,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = if (isSelected)
+                                                MaterialTheme.colorScheme.primary
+                                            else
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.title,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                                color = if (isSelected)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    MaterialTheme.colorScheme.onSurface
+                                            )
+                                            item.description?.let { desc ->
+                                                Text(
+                                                    text = desc,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.ChevronRight,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item(key = "divider_$sectionTitle") {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                    }
                 }
             }
         }
@@ -203,8 +450,16 @@ fun MainApp() {
         Scaffold(
             topBar = {
                 if (shouldShowBars) {
+                    val currentTitle = remember(currentRoute) {
+                        navigationItems.find { it.route == currentRoute }?.title ?: "Smart Work Tracker"
+                    }
                     TopAppBar(
-                        title = { Text("Smart Work Tracker") },
+                        title = {
+                            Text(
+                                text = currentTitle,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
                         navigationIcon = {
                             IconButton(onClick = {
                                 scope.launch {
@@ -215,7 +470,10 @@ fun MainApp() {
                             }) {
                                 Icon(Icons.Filled.Menu, contentDescription = "Menu")
                             }
-                        }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     )
                 }
             },
@@ -223,8 +481,29 @@ fun MainApp() {
                 if (shouldShowBars) {
                     AppBottomNavigation(
                         navController = navController,
+                        onAddEntry = { navController.navigate(NavigationItem.AddEntry.route) },
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            },
+            floatingActionButton = {
+                if (shouldShowBars && currentRoute != NavigationItem.AddEntry.route) {
+                    FloatingActionButton(
+                        onClick = { navController.navigate(NavigationItem.AddEntry.route) },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 6.dp,
+                            pressedElevation = 12.dp
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Add Entry",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
         ) { paddingValues ->
@@ -675,9 +954,10 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.defaultPopExitTran
 @Composable
 fun AppBottomNavigation(
     navController: NavHostController,
+    onAddEntry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val navigationItems = listOf(
+    val bottomItems = listOf(
         NavigationItem.Dashboard,
         NavigationItem.Calendar,
         NavigationItem.Analytics,
@@ -688,39 +968,85 @@ fun AppBottomNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    NavigationBar(
+    Surface(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.surface
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        color = MaterialTheme.colorScheme.surface
     ) {
-        navigationItems.forEach { item ->
-            NavigationBarItem(
-                icon = {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = item.title
-                    )
-                },
-                label = { Text(item.title) },
-                selected = currentRoute == item.route,
-                onClick = {
-                    if (currentRoute != item.route) {
-                        navController.navigate(item.route) {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            bottomItems.forEachIndexed { index, item ->
+                val isSelected = currentRoute == item.route
+
+                val animatedColor by animateColorAsState(
+                    targetValue = if (isSelected)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "navColor"
                 )
-            )
+
+                val animatedSize by animateDpAsState(
+                    targetValue = if (isSelected) 28.dp else 24.dp,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "navSize"
+                )
+
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isSelected)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else
+                                Color.Transparent
+                        )
+                        .padding(vertical = 8.dp)
+                        .then(
+                            if (index == 2) Modifier // spacer for center FAB gap
+                            else Modifier
+                        )
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = item.title,
+                            modifier = Modifier.size(animatedSize),
+                            tint = animatedColor
+                        )
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = if (isSelected) 11.sp else 10.sp
+                            ),
+                            color = animatedColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                // Add spacing around the center FAB area
+                if (index == 1) {
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+            }
         }
     }
 }

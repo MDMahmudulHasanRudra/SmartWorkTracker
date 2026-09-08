@@ -40,6 +40,10 @@ data class RecurringRule(
     val sourceAccount: AccountType,
     val destinationAccount: AccountType? = null,
     
+    // Account IDs for multi-account support (references Account entity)
+    val accountId: Long? = null,
+    val destinationAccountId: Long? = null,
+    
     // Frequency: DAILY, WEEKLY, BIWEEKLY, MONTHLY, YEARLY, CUSTOM, WEEKLY_SPECIFIC_DAYS
     val frequency: RecurringFrequency,
     

@@ -11,6 +11,7 @@ import com.rudra.smartworktracker.data.entity.RecurringTransaction
 import com.rudra.smartworktracker.data.entity.RecurringTransactionStatus
 import com.rudra.smartworktracker.data.entity.SyncStatus
 import com.rudra.smartworktracker.data.entity.TransactionType
+import com.rudra.smartworktracker.data.repository.AccountRepository
 import com.rudra.smartworktracker.data.repository.ExpenseRepository
 import com.rudra.smartworktracker.data.repository.IncomeRepository
 import com.rudra.smartworktracker.data.repository.RecurringRepository
@@ -27,7 +28,8 @@ class RecurringEngine(
     private val incomeRepository: IncomeRepository,
     private val expenseRepository: ExpenseRepository,
     private val transactionRepository: TransactionRepository? = null,
-    private val savingsRepository: SavingsRepository? = null
+    private val savingsRepository: SavingsRepository? = null,
+    private val accountRepository: AccountRepository? = null
 ) {
     companion object {
         private const val DEFAULT_MINIMUM_BALANCE = 0.0
@@ -134,7 +136,13 @@ class RecurringEngine(
     }
 
     suspend fun executeRule(rule: RecurringRule, currentBalance: Double = DEFAULT_MINIMUM_BALANCE): EngineExecutionResult {
-        val balanceCheck = checkBalanceProtection(rule, currentBalance)
+        val effectiveBalance = if (rule.accountId != null && accountRepository != null) {
+            accountRepository.getAccountById(rule.accountId)?.balance ?: currentBalance
+        } else {
+            currentBalance
+        }
+
+        val balanceCheck = checkBalanceProtection(rule, effectiveBalance)
         if (!balanceCheck.canExecute) {
             return EngineExecutionResult(
                 success = false,
@@ -222,6 +230,8 @@ class RecurringEngine(
             category = rule.category,
             sourceAccount = rule.sourceAccount,
             destinationAccount = rule.destinationAccount,
+            accountId = rule.accountId,
+            destinationAccountId = rule.destinationAccountId,
             scheduledDate = rule.nextExecutionDate,
             status = if (rule.autoExecute) RecurringTransactionStatus.PENDING else RecurringTransactionStatus.CONFIRMED
         )
@@ -238,7 +248,12 @@ class RecurringEngine(
                 syncStatus = SyncStatus.LOCAL_ONLY
             )
             incomeRepository.insertIncome(income)
-            EngineExecutionResult(success = true, reason = "Income added successfully", relatedIncomeId = income.id)
+
+            rule.accountId?.let { accountId ->
+                accountRepository?.addIncomeToAccount(accountId, rule.amount)
+            }
+
+            EngineExecutionResult(success = true, reason = "Income added successfully")
         } catch (e: Exception) {
             EngineExecutionResult(success = false, reason = e.message)
         }
@@ -256,7 +271,12 @@ class RecurringEngine(
                 syncStatus = SyncStatus.LOCAL_ONLY
             )
             expenseRepository.insertExpense(expense)
-            EngineExecutionResult(success = true, reason = "Expense added successfully", relatedExpenseId = expense.id.hashCode().toLong())
+
+            rule.accountId?.let { accountId ->
+                accountRepository?.deductExpenseFromAccount(accountId, rule.amount)
+            }
+
+            EngineExecutionResult(success = true, reason = "Expense added successfully")
         } catch (e: Exception) {
             EngineExecutionResult(success = false, reason = e.message)
         }
@@ -290,18 +310,34 @@ class RecurringEngine(
 
     private suspend fun executeTransfer(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
         return try {
-            val transaction = FinancialTransaction(
-                type = TransactionType.TRANSFER,
-                amount = rule.amount,
-                source = rule.sourceAccount,
-                destination = rule.destinationAccount ?: AccountType.BALANCE,
-                note = rule.name,
-                category = rule.category,
-                date = System.currentTimeMillis(),
-                syncStatus = SyncStatus.LOCAL_ONLY
-            )
-            transactionRepository?.insertTransaction(transaction)
-            EngineExecutionResult(success = true, reason = "Transfer executed successfully")
+            if (rule.accountId != null && rule.destinationAccountId != null && accountRepository != null) {
+                val transferResult = accountRepository.transferBetweenAccounts(
+                    fromAccountId = rule.accountId,
+                    toAccountId = rule.destinationAccountId,
+                    amount = rule.amount
+                )
+                when (transferResult) {
+                    is com.rudra.smartworktracker.data.repository.TransferResult.Success -> {
+                        EngineExecutionResult(success = true, reason = "Transfer executed successfully")
+                    }
+                    is com.rudra.smartworktracker.data.repository.TransferResult.Error -> {
+                        EngineExecutionResult(success = false, reason = transferResult.message)
+                    }
+                }
+            } else {
+                val transaction = FinancialTransaction(
+                    type = TransactionType.TRANSFER,
+                    amount = rule.amount,
+                    source = rule.sourceAccount,
+                    destination = rule.destinationAccount ?: AccountType.BALANCE,
+                    note = rule.name,
+                    category = rule.category,
+                    date = System.currentTimeMillis(),
+                    syncStatus = SyncStatus.LOCAL_ONLY
+                )
+                transactionRepository?.insertTransaction(transaction)
+                EngineExecutionResult(success = true, reason = "Transfer executed successfully")
+            }
         } catch (e: Exception) {
             EngineExecutionResult(success = false, reason = e.message)
         }

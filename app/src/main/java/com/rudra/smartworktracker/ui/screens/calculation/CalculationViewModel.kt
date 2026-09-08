@@ -98,7 +98,16 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
                 "Home Office" to homeOfficeDaysCount.toFloat()
             )
 
-            calculateAllCosts(dailyMealRate, travelExpense, officeDaysCount, officeDaysCount, homeOfficeDaysCount, pieData)
+            val totalWorkDays = officeDaysCount + homeOfficeDaysCount
+
+            calculateAllCosts(
+                dailyMealRate = dailyMealRate,
+                travelExpense = travelExpense,
+                officeDays = officeDaysCount,
+                totalWorkDays = totalWorkDays,
+                homeOfficeDays = homeOfficeDaysCount,
+                pieData = pieData
+            )
         } catch (e: Exception) {
             _errorMessage.emit("Failed to fetch work logs: ${e.message}")
         }
@@ -114,17 +123,21 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
             val monthlyData = mutableListOf<Pair<String, Double>>()
 
             val monthFormat = SimpleDateFormat("MMM", Locale.getDefault())
+            val yearMonthFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
 
             for (month in 0..11) {
                 calendar.set(currentYear, month, 1)
                 val monthName = monthFormat.format(calendar.time)
-
-                val yearMonthFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
                 val selectedMonthYear = yearMonthFormat.format(calendar.time)
                 val workLogs = db.workLogDao().getWorkLogsByMonth(selectedMonthYear)
-                val officeDaysCount = workLogs.count { it.workType == WorkType.OFFICE }
 
-                val monthlyCost = (dailyMealRate + travelExpense.dailyTravelCost) * officeDaysCount + travelExpense.otherExpenses
+                val officeDaysCount = workLogs.count { it.workType == WorkType.OFFICE }
+                val homeOfficeDaysCount = workLogs.count { it.workType == WorkType.HOME_OFFICE }
+                val totalWorkDays = officeDaysCount + homeOfficeDaysCount
+
+                val mealCost = dailyMealRate * totalWorkDays
+                val travelCost = travelExpense.dailyTravelCost * officeDaysCount
+                val monthlyCost = mealCost + travelCost + travelExpense.otherExpenses
                 monthlyData.add(monthName to monthlyCost)
             }
 
@@ -138,26 +151,26 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
         dailyMealRate: Double,
         travelExpense: TravelAndExpense,
         officeDays: Int,
-        officeDaysForState: Int = officeDays,
-        homeOfficeDaysForState: Int = 0,
+        totalWorkDays: Int,
+        homeOfficeDays: Int = 0,
         pieData: Map<String, Float> = emptyMap()
     ) {
         try {
             val calendar = Calendar.getInstance()
             calendar.time = _uiState.value.selectedDate
             val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val weeksInMonth = if (daysInMonth > 0) daysInMonth / 7.0 else 4.33
 
-            val weeklyOfficeDays = if (weeksInMonth > 0) officeDays / weeksInMonth else 0.0
-
-            val mealWeek = dailyMealRate * weeklyOfficeDays
-            val mealMonth = dailyMealRate * officeDays
+            val mealWeek = dailyMealRate * 5
+            val mealMonth = dailyMealRate * totalWorkDays
             val mealYear = mealMonth * 12
-            val travelWeek = travelExpense.dailyTravelCost * weeklyOfficeDays
+
+            val travelWeek = travelExpense.dailyTravelCost * 5
             val travelMonth = travelExpense.dailyTravelCost * officeDays
             val travelYear = travelMonth * 12
+
             val otherMonth = travelExpense.otherExpenses
             val otherYear = otherMonth * 12
+
             val totalMonth = mealMonth + travelMonth + otherMonth
             val totalYear = mealYear + travelYear + otherYear
 
@@ -173,8 +186,8 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
                     otherExpensePerYear = otherYear,
                     totalExpensePerMonth = totalMonth,
                     totalExpensePerYear = totalYear,
-                    officeDays = officeDaysForState,
-                    homeOfficeDays = homeOfficeDaysForState,
+                    officeDays = officeDays,
+                    homeOfficeDays = homeOfficeDays,
                     pieChartData = pieData
                 )
             }

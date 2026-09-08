@@ -16,6 +16,8 @@ import com.rudra.smartworktracker.data.repository.ExecutionHistoryRepository
 import com.rudra.smartworktracker.data.repository.IncomeRepository
 import com.rudra.smartworktracker.data.repository.RecurringRepository
 import com.rudra.smartworktracker.data.repository.SavingsRepository
+import com.rudra.smartworktracker.data.repository.AccountRepository
+import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.engine.RecurringEngine
 import com.rudra.smartworktracker.engine.YearlyProjection
 import com.rudra.smartworktracker.engine.PatternSuggestion
@@ -34,7 +36,8 @@ class RecurringViewModel(
     private val recurringEngine: RecurringEngine,
     private val incomeRepository: IncomeRepository? = null,
     private val expenseRepository: ExpenseRepository? = null,
-    private val executionHistoryRepository: ExecutionHistoryRepository? = null
+    private val executionHistoryRepository: ExecutionHistoryRepository? = null,
+    private val accountRepository: AccountRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecurringUiState())
@@ -96,6 +99,12 @@ class RecurringViewModel(
 
         viewModelScope.launch {
             loadPatternSuggestions()
+        }
+
+        viewModelScope.launch {
+            accountRepository?.getAllAccounts()?.collect { accounts ->
+                _uiState.value = _uiState.value.copy(accounts = accounts)
+            }
         }
     }
 
@@ -530,7 +539,8 @@ class RecurringViewModel(
         val selectedRuleIds: Set<Long> = emptySet(),
         val isMultiSelectMode: Boolean = false,
         val pendingConfirmations: List<RecurringTransaction> = emptyList(),
-        val categoryBreakdown: Map<String, Double> = emptyMap()
+        val categoryBreakdown: Map<String, Double> = emptyMap(),
+        val accounts: List<Account> = emptyList()
     )
 }
 
@@ -566,12 +576,14 @@ class RecurringViewModelFactory(private val context: Context) : ViewModelProvide
             val expenseRepository = ExpenseRepository(database.expenseDao())
             val savingsRepository = SavingsRepository(database.savingsDao())
             val executionHistoryRepository = ExecutionHistoryRepository(database.executionHistoryDao())
+            val accountRepository = AccountRepository(database.accountDao())
             val engine = RecurringEngine(
                 repository, incomeRepository, expenseRepository,
-                savingsRepository = savingsRepository
+                savingsRepository = savingsRepository,
+                accountRepository = accountRepository
             )
             @Suppress("UNCHECKED_CAST")
-            return RecurringViewModel(repository, engine, incomeRepository, expenseRepository, executionHistoryRepository) as T
+            return RecurringViewModel(repository, engine, incomeRepository, expenseRepository, executionHistoryRepository, accountRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

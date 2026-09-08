@@ -1,10 +1,13 @@
 package com.rudra.smartworktracker.ui.screens.calculation
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,8 +20,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -27,16 +35,18 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.yml.charts.common.model.PlotType
-import co.yml.charts.ui.piechart.charts.PieChart
-import co.yml.charts.ui.piechart.models.PieChartConfig
-import co.yml.charts.ui.piechart.models.PieChartData
-import com.rudra.smartworktracker.ui.theme.SmartWorkTrackerTheme
 import com.rudra.smartworktracker.utils.CurrencyManager
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
+
+private val Green500 = Color(0xFF4CAF50)
+private val Green700 = Color(0xFF388E3C)
+private val Blue500 = Color(0xFF2196F3)
+private val Orange500 = Color(0xFFFF9800)
+private val Purple500 = Color(0xFF9C27B0)
+private val Red500 = Color(0xFFF44336)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,10 +54,7 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val viewModel: CalculationViewModel = viewModel(factory = CalculationViewModelFactory(context))
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-
     val uiState by viewModel.uiState.collectAsState()
-
     val focusManager = LocalFocusManager.current
     val monthYearFormat = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
 
@@ -81,175 +88,140 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
         }
     }
 
-    SmartWorkTrackerTheme {
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Expense Calculator",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                "Back",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    actions = {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Expense Calculator", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { viewModel.exportToExcel(context) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Default.Download, "Export")
-                }
-            },
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-            ) { paddingValues ->
-                if (uiState.isLoading && uiState.calculation == null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .padding(paddingValues)
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        MonthNavigator(
-                            month = monthYearFormat.format(uiState.selectedDate),
-                            onPrevious = { viewModel.goToPreviousMonth() },
-                            onNext = { viewModel.goToNextMonth() },
-                            isLoading = uiState.isLoading
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                actions = {
+                    if (uiState.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.exportToExcel(context) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    ) { paddingValues ->
+        if (uiState.isLoading && uiState.calculation == null) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface),
+                contentPadding = PaddingValues(bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    MonthNavigator(
+                        month = monthYearFormat.format(uiState.selectedDate),
+                        onPrevious = { viewModel.goToPreviousMonth() },
+                        onNext = { viewModel.goToNextMonth() },
+                        isLoading = uiState.isLoading
+                    )
+                }
 
-                    item {
-                        SummaryHeaderCard(
+                item {
+                    HeroSummaryCard(
+                        officeDays = uiState.officeDays,
+                        homeOfficeDays = uiState.homeOfficeDays,
+                        totalCost = uiState.totalExpensePerMonth,
+                        totalYearly = uiState.totalExpensePerYear
+                    )
+                }
+
+                item {
+                    QuickStatsRow(
+                        mealWeekly = uiState.mealCostPerWeek,
+                        travelWeekly = uiState.travelCostPerWeek,
+                        mealMonthly = uiState.mealCostPerMonth,
+                        travelMonthly = uiState.travelCostPerMonth
+                    )
+                }
+
+                item {
+                    if (uiState.monthlyBreakdown.isNotEmpty()) {
+                        MonthlyBarChart(
+                            data = uiState.monthlyBreakdown,
+                            year = viewModel.getCurrentYear()
+                        )
+                    }
+                }
+
+                item {
+                    val totalDays = uiState.officeDays + uiState.homeOfficeDays
+                    if (totalDays > 0) {
+                        WorkDistributionCard(
                             officeDays = uiState.officeDays,
-                            homeOfficeDays = uiState.homeOfficeDays,
-                            totalCost = uiState.totalExpensePerMonth,
-                            isLoading = uiState.isLoading
+                            homeOfficeDays = uiState.homeOfficeDays
+                        )
+                    } else {
+                        EmptyStateCard(
+                            title = "No Work Data",
+                            message = "Log your work days to see calculations",
+                            icon = Icons.Default.WorkOutline
                         )
                     }
+                }
 
-                    item {
-                        if (uiState.monthlyBreakdown.isNotEmpty()) {
-                            MonthlyBreakdownChart(
-                                data = uiState.monthlyBreakdown,
-                                year = viewModel.getCurrentYear()
+                item {
+                    ExpenseInputCard(
+                        dailyMealRate = dailyMealRate,
+                        dailyTravelCost = dailyTravelCost,
+                        otherExpenses = otherExpenses,
+                        otherExpenseDescription = otherExpenseDescription,
+                        onDailyMealRateChange = { dailyMealRate = it },
+                        onDailyTravelCostChange = { dailyTravelCost = it },
+                        onOtherExpensesChange = { otherExpenses = it },
+                        onOtherExpenseDescriptionChange = { otherExpenseDescription = it },
+                        onSaveMealRate = { rate ->
+                            rate.toDoubleOrNull()?.let { viewModel.saveDailyMealRate(it) }
+                        },
+                        onSaveTravelExpense = { travel, other, desc ->
+                            viewModel.saveTravelExpense(
+                                travel.toDoubleOrNull() ?: 0.0,
+                                other.toDoubleOrNull() ?: 0.0,
+                                desc
                             )
-                        }
-                    }
+                        },
+                        focusManager = focusManager
+                    )
+                }
 
-                    item {
-                        ExpenseInputSection(
-                            dailyMealRate = dailyMealRate,
-                            dailyTravelCost = dailyTravelCost,
-                            otherExpenses = otherExpenses,
-                            otherExpenseDescription = otherExpenseDescription,
-                            onDailyMealRateChange = { dailyMealRate = it },
-                            onDailyTravelCostChange = { dailyTravelCost = it },
-                            onOtherExpensesChange = { otherExpenses = it },
-                            onOtherExpenseDescriptionChange = { otherExpenseDescription = it },
-                            onSaveMealRate = { rate ->
-                                rate.toDoubleOrNull()?.let { viewModel.saveDailyMealRate(it) }
-                            },
-                            onSaveTravelExpense = { travel, other, desc ->
-                                viewModel.saveTravelExpense(
-                                    travel.toDoubleOrNull() ?: 0.0,
-                                    other.toDoubleOrNull() ?: 0.0,
-                                    desc
-                                )
-                            },
-                            focusManager = focusManager
-                        )
-                    }
-
-                    item {
-                        val totalDays = uiState.officeDays + uiState.homeOfficeDays
-                        if (totalDays > 0) {
-                            WorkingDaysPieChart(
-                                data = uiState.pieChartData,
-                                isLoading = uiState.isLoading
-                            )
-                        } else {
-                            NoDataPlaceholder(
-                                title = "No Work Data",
-                                message = "Log your work days to see calculations",
-                                icon = Icons.Default.WorkOutline
-                            )
-                        }
-                    }
-
-                    item {
-                        ExpandableInfoSection(
-                            title = "Meal Costs",
-                            icon = Icons.Default.Restaurant,
-                            color = MaterialTheme.colorScheme.primary,
-                            items = listOf(
-                                "Weekly" to CurrencyManager.format(uiState.mealCostPerWeek),
-                                "Monthly" to CurrencyManager.format(uiState.mealCostPerMonth),
-                                "Yearly" to CurrencyManager.format(uiState.mealCostPerYear)
-                            )
-                        )
-                    }
-
-                    item {
-                        ExpandableInfoSection(
-                            title = "Travel & Other Expenses",
-                            icon = Icons.Default.DirectionsCar,
-                            color = Color(0xFF388E3C),
-                            items = listOf(
-                                "Weekly Travel" to CurrencyManager.format(uiState.travelCostPerWeek),
-                                "Monthly Travel" to CurrencyManager.format(uiState.travelCostPerMonth),
-                                "Yearly Travel" to CurrencyManager.format(uiState.travelCostPerYear),
-                                "Monthly Other" to CurrencyManager.format(uiState.otherExpensePerMonth),
-                                "Yearly Other" to CurrencyManager.format(uiState.otherExpensePerYear)
-                            )
-                        )
-                    }
-
-                    item {
-                        ExpandableInfoSection(
-                            title = "Total Summary",
-                            icon = Icons.Default.Calculate,
-                            color = MaterialTheme.colorScheme.error,
-                            items = listOf(
-                                "Total Monthly" to CurrencyManager.format(uiState.totalExpensePerMonth),
-                                "Total Yearly" to CurrencyManager.format(uiState.totalExpensePerYear)
-                            )
-                        )
-                    }
+                item {
+                    TotalSummaryCard(
+                        monthlyTotal = uiState.totalExpensePerMonth,
+                        yearlyTotal = uiState.totalExpensePerYear
+                    )
                 }
             }
         }
@@ -257,72 +229,292 @@ fun CalculationScreen(onNavigateBack: () -> Unit) {
 }
 
 @Composable
-fun MonthlyBreakdownChart(data: List<Pair<String, Double>>, year: Int) {
-    val maxValue = data.maxOfOrNull { it.second } ?: 0.0
-    
+private fun AnimatedCounter(targetValue: Double, prefix: String = "", duration: Int = 800) {
+    val animatedValue by animateFloatAsState(
+        targetValue = targetValue.toFloat(),
+        animationSpec = tween(durationMillis = duration, easing = FastOutSlowInEasing),
+        label = "counter"
+    )
+    Text(
+        text = "$prefix${CurrencyManager.format(animatedValue.toDouble())}",
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onPrimary
+    )
+}
+
+@Composable
+fun MonthNavigator(month: String, onPrevious: () -> Unit, onNext: () -> Unit, isLoading: Boolean) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onPrevious, enabled = !isLoading) {
+                Icon(Icons.Default.ArrowBackIosNew, contentDescription = "Previous Month", modifier = Modifier.size(18.dp))
+            }
+            AnimatedContent(targetState = month, label = "Month") { targetMonth ->
+                Text(
+                    text = targetMonth,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            IconButton(onClick = onNext, enabled = !isLoading) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = "Next Month", modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun HeroSummaryCard(officeDays: Int, homeOfficeDays: Int, totalCost: Double, totalYearly: Double) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .shadow(8.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            MaterialTheme.colorScheme.tertiary
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                )
+                .padding(24.dp)
+        ) {
+            Column {
+                Text(
+                    text = "This Month",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                )
+                Spacer(Modifier.height(8.dp))
+                AnimatedCounter(targetValue = totalCost)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${CurrencyManager.format(totalYearly)} yearly",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    HeroStatItem(label = "Office", value = "$officeDays", icon = Icons.Default.Business)
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(40.dp)
+                            .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                    )
+                    HeroStatItem(label = "Home", value = "$homeOfficeDays", icon = Icons.Default.Home)
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(40.dp)
+                            .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                    )
+                    HeroStatItem(label = "Total", value = "${officeDays + homeOfficeDays}", icon = Icons.Default.CalendarMonth)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroStatItem(label: String, value: String, icon: ImageVector) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+        )
+    }
+}
+
+@Composable
+fun QuickStatsRow(mealWeekly: Double, travelWeekly: Double, mealMonthly: Double, travelMonthly: Double) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickStatCard(
+            modifier = Modifier.weight(1f),
+            title = "Meal",
+            weekly = mealWeekly,
+            monthly = mealMonthly,
+            icon = Icons.Default.Restaurant,
+            color = Orange500
+        )
+        QuickStatCard(
+            modifier = Modifier.weight(1f),
+            title = "Travel",
+            weekly = travelWeekly,
+            monthly = travelMonthly,
+            icon = Icons.Default.DirectionsCar,
+            color = Blue500
+        )
+    }
+}
+
+@Composable
+private fun QuickStatCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    weekly: Double,
+    monthly: Double,
+    icon: ImageVector,
+    color: Color
+) {
+    Card(
+        modifier = modifier.shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(color.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = color)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(text = title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(text = "Weekly", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = CurrencyManager.format(weekly), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(text = "Monthly", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = CurrencyManager.format(monthly), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun MonthlyBarChart(data: List<Pair<String, Double>>, year: Int) {
+    val maxValue = data.maxOfOrNull { it.second }?.takeIf { it > 0 } ?: 1.0
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Monthly Breakdown $year",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(text = "Monthly Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = "$year", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Icon(
                     imageVector = Icons.Default.BarChart,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
                 )
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp),
+                    .height(160.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom
             ) {
-                data.forEach { (month, value) ->
-                    val heightPercent = if (maxValue > 0) value / maxValue else 0.0
-                    
+                data.forEachIndexed { index, (month, value) ->
+                    val heightFraction = (value / maxValue).toFloat()
+                    val animatedHeight by animateFloatAsState(
+                        targetValue = heightFraction,
+                        animationSpec = tween(
+                            durationMillis = 600,
+                            delayMillis = index * 50,
+                            easing = FastOutSlowInEasing
+                        ),
+                        label = "barHeight"
+                    )
+                    val barColor = when {
+                        value == 0.0 -> MaterialTheme.colorScheme.outlineVariant
+                        index == data.indexOfMaxByValue() -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    }
+
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom
+                        verticalArrangement = Arrangement.Bottom,
+                        modifier = Modifier.weight(1f)
                     ) {
+                        if (value > 0) {
+                            Text(
+                                text = "%.0f".format(value),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 8.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(2.dp))
+                        }
                         Box(
                             modifier = Modifier
-                                .width(20.dp)
-                                .height((heightPercent * 120).dp)
-                                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                                .background(MaterialTheme.colorScheme.primary)
+                                .width(14.dp)
+                                .height((animatedHeight * 120).dp)
+                                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                .background(barColor)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = month,
                             style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(
-                            text = "%.0f".format(value),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }
@@ -330,86 +522,79 @@ fun MonthlyBreakdownChart(data: List<Pair<String, Double>>, year: Int) {
     }
 }
 
+private fun List<Pair<String, Double>>.indexOfMaxByValue(): Int {
+    return if (isNotEmpty()) indexOf(maxByOrNull { it.second }) else -1
+}
+
 @Composable
-fun ExpandableInfoSection(
-    title: String,
-    icon: ImageVector,
-    color: Color,
-    items: List<Pair<String, String>>
-) {
-    var expanded by remember { mutableStateOf(true) }
-    
+fun WorkDistributionCard(officeDays: Int, homeOfficeDays: Int) {
+    val total = officeDays + homeOfficeDays
+    val officeFraction = if (total > 0) officeDays.toFloat() / total else 0f
+    val homeFraction = if (total > 0) homeOfficeDays.toFloat() / total else 0f
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+
+    val animateProgress by animateFloatAsState(
+        targetValue = officeFraction,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "progress"
+    )
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Row(
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(text = "Work Distribution", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(20.dp))
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.outlineVariant)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = color,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = animateProgress)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(primaryColor)
                 )
             }
-            
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                ) {
-                    items.forEach { (label, value) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = value,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+                LegendItem(color = primaryColor, label = "Office", value = "$officeDays days", percentage = "%.0f%%".format(officeFraction * 100))
+                LegendItem(color = secondaryColor, label = "Home", value = "$homeOfficeDays days", percentage = "%.0f%%".format(homeFraction * 100))
             }
         }
     }
 }
 
 @Composable
-fun ExpenseInputSection(
+private fun LegendItem(color: Color, label: String, value: String, percentage: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(color))
+        Column {
+            Text(text = "$label $percentage", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(text = value, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun ExpenseInputCard(
     dailyMealRate: String,
     dailyTravelCost: String,
     otherExpenses: String,
@@ -422,197 +607,212 @@ fun ExpenseInputSection(
     onSaveTravelExpense: (String, String, String) -> Unit,
     focusManager: FocusManager
 ) {
-    var showOtherExpenseDetails by remember { mutableStateOf(false) }
-    
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Expense Settings",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                shape = RoundedCornerShape(12.dp)
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Restaurant,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Daily Meal Rate",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     }
-                    
-                    OutlinedTextField(
+                    Spacer(Modifier.width(12.dp))
+                    Text(text = "Expense Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    ExpenseInputField(
+                        label = "Daily Meal Rate",
                         value = dailyMealRate,
                         onValueChange = onDailyMealRateChange,
-                        label = { Text("Amount in Taka") },
-                        leadingIcon = {
-                            Text(
-                                text = CurrencyManager.symbol(),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                onSaveMealRate(dailyMealRate)
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        icon = Icons.Default.Restaurant,
+                        iconColor = Orange500,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { onSaveMealRate(dailyMealRate) },
+                        focusManager = focusManager
                     )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = null,
-                                tint = Color(0xFF388E3C)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Travel & Other Expenses",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        IconButton(
-                            onClick = { showOtherExpenseDetails = !showOtherExpenseDetails },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (showOtherExpenseDetails) Icons.Default.Info else Icons.Default.Warning,
-                                contentDescription = "More info",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    
-                    OutlinedTextField(
+
+                    Spacer(Modifier.height(12.dp))
+
+                    ExpenseInputField(
+                        label = "Daily Travel Cost",
                         value = dailyTravelCost,
                         onValueChange = onDailyTravelCostChange,
-                        label = { Text("Daily Travel Cost") },
-                        leadingIcon = { 
-                            Text(
-                                text = CurrencyManager.symbol(),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        icon = Icons.Default.DirectionsCar,
+                        iconColor = Blue500,
+                        imeAction = ImeAction.Next,
+                        focusManager = focusManager
                     )
-                    
-                    AnimatedVisibility(visible = showOtherExpenseDetails) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(top = 12.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = otherExpenses,
-                                onValueChange = onOtherExpensesChange,
-                                label = { Text("Monthly Other Expenses") },
-                                leadingIcon = { 
-                                    Text(
-                                        text = CurrencyManager.symbol(),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(start = 8.dp)
-                                    )
-                                },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number,
-                                    imeAction = ImeAction.Next
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            
-                            OutlinedTextField(
-                                value = otherExpenseDescription,
-                                onValueChange = onOtherExpenseDescriptionChange,
-                                label = { Text("Description (optional)") },
-                                keyboardOptions = KeyboardOptions(
-                                    imeAction = ImeAction.Done
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onDone = {
-                                        onSaveTravelExpense(dailyTravelCost, otherExpenses, otherExpenseDescription)
-                                        focusManager.clearFocus()
-                                    }
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                maxLines = 2
-                            )
-                        }
-                    }
-                    
+
+                    Spacer(Modifier.height(12.dp))
+
+                    ExpenseInputField(
+                        label = "Monthly Other Expenses",
+                        value = otherExpenses,
+                        onValueChange = onOtherExpensesChange,
+                        icon = Icons.Default.Receipt,
+                        iconColor = Purple500,
+                        imeAction = ImeAction.Next,
+                        focusManager = focusManager
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = otherExpenseDescription,
+                        onValueChange = onOtherExpenseDescriptionChange,
+                        label = { Text("Description (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 2
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
                     Button(
                         onClick = {
                             onSaveTravelExpense(dailyTravelCost, otherExpenses, otherExpenseDescription)
                             focusManager.clearFocus()
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF388E3C)
-                        )
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Save Travel Settings")
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Save Settings", fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    icon: ImageVector,
+    iconColor: Color,
+    imeAction: ImeAction,
+    onImeAction: (() -> Unit)? = null,
+    focusManager: FocusManager
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        leadingIcon = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(iconColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = iconColor)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = CurrencyManager.symbol(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = imeAction
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                onImeAction?.invoke()
+                focusManager.clearFocus()
+            }
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        singleLine = true
+    )
+}
+
+@Composable
+fun TotalSummaryCard(monthlyTotal: Double, yearlyTotal: Double) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .shadow(6.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Red500.copy(alpha = 0.9f),
+                            Red500
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Calculate, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = "Total Expenses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "Monthly", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                        Spacer(Modifier.height(4.dp))
+                        AnimatedCounter(targetValue = monthlyTotal, duration = 1000)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "Yearly", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                        Spacer(Modifier.height(4.dp))
+                        AnimatedCounter(targetValue = yearlyTotal, duration = 1200)
                     }
                 }
             }
@@ -621,179 +821,43 @@ fun ExpenseInputSection(
 }
 
 @Composable
-fun MonthNavigator(month: String, onPrevious: () -> Unit, onNext: () -> Unit, isLoading: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onPrevious, enabled = !isLoading) {
-            Icon(Icons.Default.ArrowBackIosNew, contentDescription = "Previous Month")
-        }
-        AnimatedContent(targetState = month, label = "Month Text") { targetMonth ->
-            Text(
-                text = targetMonth,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        IconButton(onClick = onNext, enabled = !isLoading) {
-            Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = "Next Month")
-        }
-    }
-}
-
-@Composable
-fun SummaryHeaderCard(officeDays: Int, homeOfficeDays: Int, totalCost: Double, isLoading: Boolean) {
+fun EmptyStateCard(title: String, message: String, icon: ImageVector) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "This Month's Summary",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                SummaryItem("Office", "$officeDays days")
-                SummaryItem("Home", "$homeOfficeDays days")
-                SummaryItem("Total", "${officeDays + homeOfficeDays} days")
-                SummaryItem("Total Cost", CurrencyManager.format(totalCost), isCost = true)
-            }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.SummaryItem(label: String, value: String, isCost: Boolean = false) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.weight(1f)
-    ) {
-        Text(text = label, style = MaterialTheme.typography.labelMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = if (isCost) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-fun WorkingDaysPieChart(data: Map<String, Float>, isLoading: Boolean) {
-    val pieChartColors = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.secondary
-    )
-
-    val officeValue = data["Office"] ?: 0f
-    val homeValue = data["Home Office"] ?: 0f
-    val totalValue = officeValue + homeValue
-    val officePercentage =
-        if (totalValue > 0f) (officeValue / totalValue) * 100f else 0f
-
-    val pieChartData = PieChartData(
-        slices = data.entries.mapIndexed { index, entry ->
-            PieChartData.Slice(
-                label = entry.key,
-                value = entry.value,
-                color = pieChartColors[index % pieChartColors.size]
-            )
-        },
-        plotType = PlotType.Donut
-    )
-
-    val pieChartConfig = PieChartConfig(
-        isAnimationEnable = true,
-        showSliceLabels = false,
-        strokeWidth = 28f,
-        chartPadding = 20
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(260.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            PieChart(
-                modifier = Modifier.size(220.dp),
-                pieChartData = pieChartData,
-                pieChartConfig = pieChartConfig
-            )
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "${officePercentage.toInt()}%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Office",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            if (isLoading) {
-                Box(modifier = Modifier.matchParentSize().background(Color.White.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun NoDataPlaceholder(title: String, message: String, icon: ImageVector) {
-    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 16.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(text = title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 4.dp)
             )
         }
     }

@@ -127,6 +127,7 @@ fun RecurringScreen(
                     isRefreshing = uiState.isRefreshing,
                     isMultiSelectMode = uiState.isMultiSelectMode,
                     selectedRuleIds = uiState.selectedRuleIds,
+                    accounts = uiState.accounts,
                     onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                     onFilterChange = { viewModel.updateFilter(it) },
                     onToggleRule = { viewModel.toggleRuleActive(it) },
@@ -207,6 +208,7 @@ fun RecurringScreen(
                 sheetState = sheetState
             ) {
                 AddRuleContent(
+                    accounts = uiState.accounts,
                     onSave = { rule ->
                         viewModel.addRule(rule)
                         showAddRuleSheet = false
@@ -223,6 +225,7 @@ fun RecurringScreen(
             ) {
                 AddRuleContent(
                     existingRule = editingRule,
+                    accounts = uiState.accounts,
                     onSave = { rule ->
                         viewModel.updateRule(rule)
                         editingRule = null

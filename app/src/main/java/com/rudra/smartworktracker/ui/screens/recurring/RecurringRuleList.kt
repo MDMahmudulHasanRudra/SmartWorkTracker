@@ -97,6 +97,7 @@ fun RulesTab(
     isRefreshing: Boolean,
     isMultiSelectMode: Boolean,
     selectedRuleIds: Set<Long>,
+    accounts: List<com.rudra.smartworktracker.data.entity.Account> = emptyList(),
     onSearchQueryChange: (String) -> Unit,
     onFilterChange: (RuleFilter) -> Unit,
     onToggleRule: (RecurringRule) -> Unit,
@@ -216,6 +217,7 @@ fun RulesTab(
                         if (isMultiSelectMode) {
                             RuleCard(
                                 rule = rule,
+                                accounts = accounts,
                                 onToggle = { onToggleRule(rule) },
                                 onEdit = { onEditRule(rule) },
                                 onDelete = { onDeleteRule(rule) },
@@ -256,6 +258,7 @@ fun RulesTab(
                             ) {
                                 RuleCard(
                                     rule = rule,
+                                    accounts = accounts,
                                     onToggle = { onToggleRule(rule) },
                                     onEdit = { onEditRule(rule) },
                                     onDelete = { onDeleteRule(rule) },
@@ -341,7 +344,8 @@ fun RuleCard(
     onExecuteNow: () -> Unit,
     isSelected: Boolean = false,
     isMultiSelectMode: Boolean = false,
-    onToggleSelection: () -> Unit = {}
+    onToggleSelection: () -> Unit = {},
+    accounts: List<com.rudra.smartworktracker.data.entity.Account> = emptyList()
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
@@ -488,7 +492,8 @@ fun RuleCard(
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     HorizontalDivider()
                     DetailRow("Category", rule.category ?: "Not set")
-                    DetailRow("Source", rule.sourceAccount.name)
+                    val accountName = rule.accountId?.let { id -> accounts.find { it.id == id }?.name }
+                    DetailRow("Source", accountName ?: rule.sourceAccount.name)
                     DetailRow("Auto Execute", if (rule.autoExecute) "Yes" else "No")
                     if (rule.minimumBalanceRequired != null) {
                         DetailRow("Min Balance", "$${String.format("%.2f", rule.minimumBalanceRequired)}")

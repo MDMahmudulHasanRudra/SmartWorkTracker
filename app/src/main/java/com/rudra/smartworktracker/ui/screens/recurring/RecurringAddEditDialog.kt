@@ -160,6 +160,7 @@ fun TemplateSelectionSheet(
 @Composable
 fun AddRuleContent(
     existingRule: RecurringRule? = null,
+    accounts: List<com.rudra.smartworktracker.data.entity.Account> = emptyList(),
     onSave: (RecurringRule) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -171,6 +172,8 @@ fun AddRuleContent(
     var transactionType by remember { mutableStateOf(existingRule?.transactionType ?: TransactionType.EXPENSE) }
     var sourceAccount by remember { mutableStateOf(existingRule?.sourceAccount ?: AccountType.BALANCE) }
     var destinationAccount by remember { mutableStateOf(existingRule?.destinationAccount) }
+    var selectedAccountId by remember { mutableStateOf(existingRule?.accountId) }
+    var selectedDestinationAccountId by remember { mutableStateOf(existingRule?.destinationAccountId) }
     var frequency by remember { mutableStateOf(existingRule?.frequency ?: RecurringFrequency.MONTHLY) }
     var selectedDaysOfWeek by remember { mutableStateOf(existingRule?.selectedDaysOfWeek ?: emptyList()) }
     var priority by remember { mutableStateOf(existingRule?.priority ?: RecurringPriority.MEDIUM) }
@@ -186,6 +189,8 @@ fun AddRuleContent(
     var timeExpanded by remember { mutableStateOf(false) }
     var sourceExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
+    var accountExpanded by remember { mutableStateOf(false) }
+    var destinationAccountExpanded by remember { mutableStateOf(false) }
 
     var showStartDatePicker by remember { mutableStateOf(false) }
 
@@ -245,7 +250,12 @@ fun AddRuleContent(
                 destinationAccount = destinationAccount, onDestinationChange = { destinationAccount = it },
                 transactionType = transactionType,
                 minimumBalance = minimumBalance, onMinimumBalanceChange = { minimumBalance = it },
-                autoExecute = autoExecute, onAutoExecuteChange = { autoExecute = it }
+                autoExecute = autoExecute, onAutoExecuteChange = { autoExecute = it },
+                accounts = accounts,
+                selectedAccountId = selectedAccountId, onAccountIdChange = { selectedAccountId = it },
+                selectedDestinationAccountId = selectedDestinationAccountId, onDestinationAccountIdChange = { selectedDestinationAccountId = it },
+                accountExpanded = accountExpanded, onAccountExpandedChange = { accountExpanded = it },
+                destinationAccountExpanded = destinationAccountExpanded, onDestinationAccountExpandedChange = { destinationAccountExpanded = it }
             )
         }
 
@@ -288,6 +298,8 @@ fun AddRuleContent(
                             category = category.ifBlank { null },
                             sourceAccount = sourceAccount,
                             destinationAccount = destinationAccount,
+                            accountId = selectedAccountId,
+                            destinationAccountId = selectedDestinationAccountId,
                             frequency = frequency,
                             selectedDaysOfWeek = if (frequency == RecurringFrequency.WEEKLY_SPECIFIC_DAYS) selectedDaysOfWeek else null,
                             priority = priority,
@@ -565,7 +577,12 @@ fun StepAdvanced(
     destinationAccount: AccountType?, onDestinationChange: (AccountType?) -> Unit,
     transactionType: TransactionType,
     minimumBalance: String, onMinimumBalanceChange: (String) -> Unit,
-    autoExecute: Boolean, onAutoExecuteChange: (Boolean) -> Unit
+    autoExecute: Boolean, onAutoExecuteChange: (Boolean) -> Unit,
+    accounts: List<com.rudra.smartworktracker.data.entity.Account> = emptyList(),
+    selectedAccountId: Long?, onAccountIdChange: (Long?) -> Unit,
+    selectedDestinationAccountId: Long?, onDestinationAccountIdChange: (Long?) -> Unit,
+    accountExpanded: Boolean, onAccountExpandedChange: (Boolean) -> Unit,
+    destinationAccountExpanded: Boolean, onDestinationAccountExpandedChange: (Boolean) -> Unit
 ) {
     Column {
         Text("Advanced Settings", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -592,7 +609,42 @@ fun StepAdvanced(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Text("Source Account", style = MaterialTheme.typography.labelMedium)
+        Text("Link to Account", style = MaterialTheme.typography.labelMedium)
+        ExposedDropdownMenuBox(expanded = accountExpanded, onExpandedChange = onAccountExpandedChange) {
+            val selectedAccount = accounts.find { it.id == selectedAccountId }
+            OutlinedTextField(
+                value = selectedAccount?.let { "${it.name} (${com.rudra.smartworktracker.utils.CurrencyManager.format(it.balance)})" } ?: "No account selected",
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor()
+            )
+            ExposedDropdownMenu(expanded = accountExpanded, onDismissRequest = { onAccountExpandedChange(false) }) {
+                DropdownMenuItem(
+                    text = { Text("None") },
+                    onClick = { onAccountIdChange(null); onAccountExpandedChange(false) }
+                )
+                accounts.filter { it.isActive }.forEach { account ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(account.name)
+                                Text(
+                                    text = com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = { onAccountIdChange(account.id); onAccountExpandedChange(false) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Source Account (Legacy)", style = MaterialTheme.typography.labelMedium)
         ExposedDropdownMenuBox(expanded = sourceExpanded, onExpandedChange = onSourceExpandedChange) {
             OutlinedTextField(
                 value = sourceAccount.name,
@@ -611,6 +663,42 @@ fun StepAdvanced(
             }
         }
 
+        if (transactionType == TransactionType.TRANSFER) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Destination Account", style = MaterialTheme.typography.labelMedium)
+            ExposedDropdownMenuBox(expanded = destinationAccountExpanded, onExpandedChange = onDestinationAccountExpandedChange) {
+                val selectedDestAccount = accounts.find { it.id == selectedDestinationAccountId }
+                OutlinedTextField(
+                    value = selectedDestAccount?.let { "${it.name} (${com.rudra.smartworktracker.utils.CurrencyManager.format(it.balance)})" } ?: "No account selected",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = destinationAccountExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = destinationAccountExpanded, onDismissRequest = { onDestinationAccountExpandedChange(false) }) {
+                    DropdownMenuItem(
+                        text = { Text("None") },
+                        onClick = { onDestinationAccountIdChange(null); onDestinationAccountExpandedChange(false) }
+                    )
+                    accounts.filter { it.isActive && it.id != selectedAccountId }.forEach { account ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(account.name)
+                                    Text(
+                                        text = com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = { onDestinationAccountIdChange(account.id); onDestinationAccountExpandedChange(false) }
+                        )
+                    }
+                }
+            }
+        }
+
         if (transactionType == TransactionType.EXPENSE) {
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
@@ -619,7 +707,7 @@ fun StepAdvanced(
                 label = { Text("Minimum Balance Required") },
                 placeholder = { Text("Leave empty for no minimum") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                leadingIcon = { Text("$") },
+                leadingIcon = { Text(com.rudra.smartworktracker.utils.CurrencyManager.symbol()) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
