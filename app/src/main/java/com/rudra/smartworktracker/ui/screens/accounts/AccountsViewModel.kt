@@ -7,6 +7,7 @@ import com.rudra.smartworktracker.data.AppDatabase
 import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.AccountCategory
 import com.rudra.smartworktracker.data.entity.AccountProvider
+import com.rudra.smartworktracker.data.entity.AccountType
 import com.rudra.smartworktracker.data.repository.AccountRepository
 import com.rudra.smartworktracker.engine.FusionEngine
 import com.rudra.smartworktracker.engine.SmartAlert
@@ -156,8 +157,22 @@ class AccountDetailViewModel(application: Application) : AndroidViewModel(applic
                 if (account != null) {
                     val allTransactions = financialTransactionDao.getAllTransactions().first()
                     val recentTransactions = allTransactions
-                        .filter {
-                            (it.source.name == account.type.name || it.destination?.name == account.type.name)
+                        .filter { transaction ->
+                            val sourceMatches = when (account.type) {
+                                AccountCategory.WALLET -> transaction.source == AccountType.CASH
+                                AccountCategory.BANK -> transaction.source == AccountType.BANK || transaction.source == AccountType.SAVINGS
+                                AccountCategory.MOBILE_BANKING -> transaction.source == AccountType.BALANCE
+                            }
+                            val destMatches = account.type.let { category ->
+                                transaction.destination?.let { dest ->
+                                    when (category) {
+                                        AccountCategory.WALLET -> dest == AccountType.CASH
+                                        AccountCategory.BANK -> dest == AccountType.BANK || dest == AccountType.SAVINGS
+                                        AccountCategory.MOBILE_BANKING -> dest == AccountType.BALANCE
+                                    }
+                                } ?: false
+                            }
+                            sourceMatches || destMatches
                         }
                         .take(10)
 
@@ -173,6 +188,33 @@ class AccountDetailViewModel(application: Application) : AndroidViewModel(applic
                         )
                     }
                 }
+            }
+        }
+    }
+
+    fun addMoneyToAccount(accountId: Long, amount: Double, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                accountRepository.addIncomeToAccount(accountId, amount)
+                onResult(true, "Money added successfully")
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Failed to add money")
+            }
+        }
+    }
+
+    fun cashOutFromAccount(accountId: Long, amount: Double, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val account = accountRepository.getAccountById(accountId)
+                if (account != null && account.balance >= amount) {
+                    accountRepository.deductExpenseFromAccount(accountId, amount)
+                    onResult(true, "Cash out successful")
+                } else {
+                    onResult(false, "Insufficient balance")
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Failed to cash out")
             }
         }
     }

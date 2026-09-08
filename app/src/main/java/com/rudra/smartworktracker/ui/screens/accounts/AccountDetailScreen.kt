@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.icon
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,10 +28,15 @@ import java.util.*
 @Composable
 fun AccountDetailScreen(
     accountId: Long,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToTransfer: () -> Unit = {}
 ) {
     val viewModel: AccountDetailViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
+
+    var showAddMoneyDialog by remember { mutableStateOf(false) }
+    var showCashOutDialog by remember { mutableStateOf(false) }
+    var showSendDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(accountId) {
         viewModel.loadAccountDetails(accountId)
@@ -72,7 +78,12 @@ fun AccountDetailScreen(
                     }
 
                     item {
-                        QuickActionsRow(account = account)
+                        QuickActionsRow(
+                            account = account,
+                            onAddMoney = { showAddMoneyDialog = true },
+                            onCashOut = { showCashOutDialog = true },
+                            onSend = { showSendDialog = true }
+                        )
                     }
 
                     item {
@@ -88,6 +99,41 @@ fun AccountDetailScreen(
                     }
                 }
             }
+        }
+    }
+
+    uiState.account?.let { account ->
+        if (showAddMoneyDialog) {
+            AccountAmountDialog(
+                title = "Add Money",
+                accountName = account.nickname ?: account.name,
+                icon = Icons.Default.Add,
+                onDismiss = { showAddMoneyDialog = false },
+                onConfirm = { amount ->
+                    viewModel.addMoneyToAccount(account.id, amount) { success, message ->
+                        showAddMoneyDialog = false
+                    }
+                }
+            )
+        }
+
+        if (showCashOutDialog) {
+            AccountAmountDialog(
+                title = "Cash Out",
+                accountName = account.nickname ?: account.name,
+                icon = Icons.Default.Remove,
+                onDismiss = { showCashOutDialog = false },
+                onConfirm = { amount ->
+                    viewModel.cashOutFromAccount(account.id, amount) { success, message ->
+                        showCashOutDialog = false
+                    }
+                }
+            )
+        }
+
+        if (showSendDialog) {
+            onNavigateToTransfer()
+            showSendDialog = false
         }
     }
 }
@@ -117,14 +163,18 @@ fun AccountBalanceCard(account: Account) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "৳ ${String.format(Locale.getDefault(), "%,.0f", account.balance)}",
+                text = CurrencyManager.format(account.balance),
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold
                 )
             )
             Spacer(modifier = Modifier.height(8.dp))
+            val lastUpdated = remember(account.lastUpdated) {
+                val sdf = SimpleDateFormat("MMM dd, h:mm a", Locale.getDefault())
+                sdf.format(Date(account.lastUpdated))
+            }
             Text(
-                text = "Last updated: Just now",
+                text = "Last updated: $lastUpdated",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
@@ -133,7 +183,12 @@ fun AccountBalanceCard(account: Account) {
 }
 
 @Composable
-fun QuickActionsRow(account: Account) {
+fun QuickActionsRow(
+    account: Account,
+    onAddMoney: () -> Unit,
+    onCashOut: () -> Unit,
+    onSend: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -141,17 +196,17 @@ fun QuickActionsRow(account: Account) {
         QuickActionButton(
             icon = Icons.Default.Add,
             label = "Add Money",
-            onClick = { }
+            onClick = onAddMoney
         )
         QuickActionButton(
             icon = Icons.Default.Remove,
             label = "Cash Out",
-            onClick = { }
+            onClick = onCashOut
         )
         QuickActionButton(
             icon = Icons.Default.Send,
             label = "Send",
-            onClick = { }
+            onClick = onSend
         )
     }
 }
@@ -262,7 +317,7 @@ fun RecentTransactionsSection(transactions: List<com.rudra.smartworktracker.data
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "🧾 Recent Transactions",
+                text = "Recent Transactions",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 )
@@ -313,7 +368,7 @@ fun RecentTransactionsSection(transactions: List<com.rudra.smartworktracker.data
                             }
                         }
                         Text(
-                            text = "$amountPrefix৳ ${String.format(Locale.getDefault(), "%,.0f", transaction.amount)}",
+                            text = "$amountPrefix${CurrencyManager.format(transaction.amount)}",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = amountColor
@@ -327,4 +382,62 @@ fun RecentTransactionsSection(transactions: List<com.rudra.smartworktracker.data
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AccountAmountDialog(
+    title: String,
+    accountName: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var amount by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(title, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Account: $accountName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) amount = it },
+                    label = { Text("Amount") },
+                    prefix = { Text("${CurrencyManager.symbol()} ") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsedAmount = amount.toDoubleOrNull() ?: 0.0
+                    if (parsedAmount > 0) onConfirm(parsedAmount)
+                },
+                enabled = amount.toDoubleOrNull() != null && (amount.toDoubleOrNull() ?: 0.0) > 0
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

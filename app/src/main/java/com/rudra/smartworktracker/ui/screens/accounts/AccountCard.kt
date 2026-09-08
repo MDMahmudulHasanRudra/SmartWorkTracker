@@ -21,6 +21,7 @@ import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.AccountCategory
 import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.icon
+import com.rudra.smartworktracker.utils.CurrencyManager
 import java.util.Calendar
 import java.util.Locale
 
@@ -52,7 +53,7 @@ fun NetWorthCard(netWorth: Double) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
             Text(
-                text = "৳ ${formatAmount(netWorth)}",
+                text = CurrencyManager.format(netWorth),
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold
                 ),
@@ -138,7 +139,7 @@ fun AccountSection(
                 )
             )
             Text(
-                text = "৳ ${formatAmount(total)}",
+                text = CurrencyManager.format(total),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 ),
@@ -229,7 +230,7 @@ fun AccountCard(
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "৳ ${formatAmount(account.balance)}",
+                        text = CurrencyManager.format(account.balance),
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold
                         ),
@@ -237,7 +238,7 @@ fun AccountCard(
                     )
                     account.maxBalance?.let { max ->
                         Text(
-                            text = "of ৳ ${formatAmount(max)}",
+                            text = "of ${CurrencyManager.format(max)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -303,7 +304,7 @@ fun AccountCard(
                     )
                     if (account.maxBalance - account.balance > 0) {
                         Text(
-                            text = "৳ ${formatAmount(account.maxBalance - account.balance)} left",
+                            text = "${CurrencyManager.format(account.maxBalance - account.balance)} left",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

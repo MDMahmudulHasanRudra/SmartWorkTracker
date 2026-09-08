@@ -18,6 +18,7 @@ import com.rudra.smartworktracker.data.entity.AccountCategory
 import com.rudra.smartworktracker.data.entity.AccountProvider
 import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.icon
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,7 +141,7 @@ fun AddAccountDialog(
                     value = initialBalance,
                     onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) initialBalance = it },
                     label = { Text("Initial Balance") },
-                    prefix = { Text("৳ ") },
+                    prefix = { Text("${CurrencyManager.symbol()} ") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
@@ -165,7 +166,7 @@ fun AddAccountDialog(
                         value = maxBalance,
                         onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) maxBalance = it },
                         label = { Text("Max Balance (for progress bar)") },
-                        prefix = { Text("৳ ") },
+                        prefix = { Text("${CurrencyManager.symbol()} ") },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         placeholder = { Text("e.g., 50000") }
@@ -194,7 +195,7 @@ fun AddAccountDialog(
                         value = dailyLimit,
                         onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) dailyLimit = it },
                         label = { Text("Limit Amount") },
-                        prefix = { Text("৳ ") },
+                        prefix = { Text("${CurrencyManager.symbol()} ") },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         placeholder = { Text("e.g., 25000") }
@@ -297,7 +298,7 @@ fun EditAccountDialog(
                     value = balance,
                     onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) balance = it },
                     label = { Text("Current Balance") },
-                    prefix = { Text("৳ ") },
+                    prefix = { Text("${CurrencyManager.symbol()} ") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
@@ -310,7 +311,7 @@ fun EditAccountDialog(
                     Column {
                         Text("Set Max Balance", style = MaterialTheme.typography.labelMedium)
                         Text(
-                            if (account.maxBalance != null) "Current: ৳ ${account.maxBalance.toInt()}" else "For progress bar",
+                            if (account.maxBalance != null) "Current: ${CurrencyManager.format(account.maxBalance)}" else "For progress bar",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -326,7 +327,7 @@ fun EditAccountDialog(
                         value = maxBalance,
                         onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) maxBalance = it },
                         label = { Text("Max Balance") },
-                        prefix = { Text("৳ ") },
+                        prefix = { Text("${CurrencyManager.symbol()} ") },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         placeholder = { Text("e.g., 50000") }
@@ -343,7 +344,7 @@ fun EditAccountDialog(
                     Column {
                         Text("Daily Transfer Limit", style = MaterialTheme.typography.labelMedium)
                         Text(
-                            if (account.getEffectiveLimit() != null) "Current: ৳ ${account.getEffectiveLimit()?.toInt()}" else "No limit set",
+                            if (account.getEffectiveLimit() != null) "Current: ${CurrencyManager.format(account.getEffectiveLimit()!!)}" else "No limit set",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -359,7 +360,7 @@ fun EditAccountDialog(
                         value = dailyLimit,
                         onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) dailyLimit = it },
                         label = { Text("Limit Amount") },
-                        prefix = { Text("৳ ") },
+                        prefix = { Text("${CurrencyManager.symbol()} ") },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         placeholder = { Text("e.g., 25000") }
@@ -433,7 +434,7 @@ fun DeleteAccountDialog(
                         Text(account.provider.icon(), fontSize = 32.sp)
                         Column {
                             Text(account.nickname ?: account.name, fontWeight = FontWeight.Medium)
-                            Text("Balance: ৳ ${formatAmount(account.balance)}", style = MaterialTheme.typography.bodySmall)
+                            Text("Balance: ${CurrencyManager.format(account.balance)}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -467,7 +468,7 @@ fun DeleteAccountDialog(
                                     text = {
                                         Column {
                                             Text(targetAccount.nickname ?: targetAccount.name)
-                                            Text("Balance: ৳ ${formatAmount(targetAccount.balance)}", style = MaterialTheme.typography.bodySmall)
+                                            Text("Balance: ${CurrencyManager.format(targetAccount.balance)}", style = MaterialTheme.typography.bodySmall)
                                         }
                                     },
                                     onClick = {
