@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,7 +57,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -64,8 +70,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.Savings
+import com.rudra.smartworktracker.data.entity.displayName
+import com.rudra.smartworktracker.data.entity.icon
 import com.rudra.smartworktracker.ui.components.EmptyStateCard
 import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
@@ -79,12 +89,9 @@ fun SavingsScreen() {
     val viewModel: SavingsViewModel = viewModel(factory = SavingsViewModelFactory(context.applicationContext as Application))
     val uiState by viewModel.uiState.collectAsState()
 
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(TimeRange.ALL) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var isWithdrawal by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -121,84 +128,103 @@ fun SavingsScreen() {
                 CircularProgressIndicator()
             }
         } else {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Current Savings with animation
-                AnimatedSavingsCard(savings = uiState.savings)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Stats Cards
-                SavingsStatsCards(stats = uiState.stats)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Filter Chips
-                FilterChips(
-                    selectedRange = selectedFilter,
-                    onRangeSelected = {
-                        selectedFilter = it
-                        viewModel.filterByTimeRange(it)
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Savings Chart
-                SavingsHistoryChart(history = uiState.filteredHistory.ifEmpty { uiState.savingsHistory })
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Add/Withdraw Button
-                Button(
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Add Transaction")
+                // Total savings card
+                item {
+                    AnimatedSavingsCard(savings = uiState.savings)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // History List
-                if (showHistory && uiState.filteredHistory.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Transactions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                // Per-account savings cards
+                if (uiState.accounts.isNotEmpty()) {
+                    item {
+                        AccountSavingsOverview(
+                            accounts = uiState.accounts,
+                            accountSavings = uiState.accountSavings,
+                            selectedAccountId = uiState.selectedAccountId,
+                            onAccountSelected = { viewModel.selectAccount(it) }
                         )
-                        androidx.compose.material3.IconButton(onClick = { viewModel.toggleSortOrder() }) {
-                            Icon(
-                                if (uiState.sortOrder == SortOrder.DESCENDING)
-                                    Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-                                contentDescription = "Sort"
+                    }
+                }
+
+                // Stats
+                item {
+                    SavingsStatsCards(stats = uiState.stats)
+                }
+
+                // Filter chips
+                item {
+                    FilterChips(
+                        selectedRange = selectedFilter,
+                        onRangeSelected = {
+                            selectedFilter = it
+                            viewModel.filterByTimeRange(it)
+                        }
+                    )
+                }
+
+                // Chart
+                item {
+                    SavingsHistoryChart(history = uiState.filteredHistory.ifEmpty { uiState.savingsHistory })
+                }
+
+                // Add button
+                item {
+                    Button(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Add Transaction")
+                    }
+                }
+
+                // History list
+                if (showHistory && uiState.filteredHistory.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Transactions",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
+                            IconButton(onClick = { viewModel.toggleSortOrder() }) {
+                                Icon(
+                                    if (uiState.sortOrder == SortOrder.DESCENDING)
+                                        Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                    contentDescription = "Sort"
+                                )
+                            }
                         }
                     }
-                    SavingsHistoryList(
-                        history = uiState.filteredHistory,
-                        onDelete = { savings -> viewModel.deleteTransaction(savings) }
-                    )
+                    items(uiState.filteredHistory) { savings ->
+                        SavingsHistoryItem(
+                            savings = savings,
+                            accounts = uiState.accounts,
+                            onDelete = { viewModel.deleteTransaction(savings) }
+                        )
+                    }
                 } else if (showHistory) {
-                    EmptyStateCard(
-                        icon = Icons.Default.Savings,
-                        title = "No transactions yet",
-                        message = "Add a deposit or withdrawal to start tracking your savings."
-                    )
+                    item {
+                        EmptyStateCard(
+                            icon = Icons.Default.Savings,
+                            title = "No transactions yet",
+                            message = "Add a deposit or withdrawal to start tracking your savings."
+                        )
+                    }
                 }
             }
         }
@@ -206,12 +232,13 @@ fun SavingsScreen() {
         // Add Transaction Dialog
         if (showAddDialog) {
             AddTransactionDialog(
+                accounts = uiState.accounts,
                 onDismiss = { showAddDialog = false },
-                onAdd = { amt: Double, nte: String, isWtd: Boolean ->
+                onAdd = { amt, nte, isWtd, accountId ->
                     if (isWtd) {
-                        viewModel.withdrawFromSavings(amt, nte)
+                        viewModel.withdrawFromSavings(amt, nte, accountId)
                     } else {
-                        viewModel.addToSavings(amt, nte)
+                        viewModel.addToSavings(amt, nte, accountId)
                     }
                     showAddDialog = false
                 }
@@ -226,9 +253,9 @@ fun SavingsScreen() {
                     .padding(16.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
-                androidx.compose.material3.Snackbar(
+                Snackbar(
                     action = {
-                        androidx.compose.material3.TextButton(onClick = { viewModel.clearError() }) {
+                        TextButton(onClick = { viewModel.clearError() }) {
                             Text("Dismiss")
                         }
                     }
@@ -245,10 +272,126 @@ fun SavingsScreen() {
                     .padding(16.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
-                androidx.compose.material3.Snackbar(
+                Snackbar(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(success)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AccountSavingsOverview(
+    accounts: List<Account>,
+    accountSavings: Map<Long, Double>,
+    selectedAccountId: Long?,
+    onAccountSelected: (Long?) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Savings by Account",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // All accounts option
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onAccountSelected(null) }
+                    .background(
+                        if (selectedAccountId == null)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        else Color.Transparent
+                    )
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Savings,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("All Accounts", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (selectedAccountId == null) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Selected",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Per-account rows
+            accounts.forEach { account ->
+                val savings = accountSavings[account.id] ?: 0.0
+                if (savings != 0.0) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onAccountSelected(account.id) }
+                            .background(
+                                if (selectedAccountId == account.id)
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                else Color.Transparent
+                            )
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(account.provider.icon(), style = MaterialTheme.typography.bodyLarge)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    account.nickname ?: account.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    account.type.displayName(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                CurrencyManager.format(savings),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (savings >= 0) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                            )
+                            if (selectedAccountId == account.id) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -267,7 +410,7 @@ fun FilterChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         TimeRange.entries.forEach { range ->
-            androidx.compose.material3.FilterChip(
+            FilterChip(
                 selected = selectedRange == range,
                 onClick = { onRangeSelected(range) },
                 label = { Text(range.name.replace("_", " ")) }
@@ -275,6 +418,7 @@ fun FilterChips(
         }
     }
 }
+
 @Composable
 fun AnimatedSavingsCard(savings: Double) {
     val animatedSavings by animateFloatAsState(
@@ -284,8 +428,9 @@ fun AnimatedSavingsCard(savings: Double) {
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -306,7 +451,7 @@ fun AnimatedSavingsCard(savings: Double) {
                     modifier = Modifier.size(24.dp)
                 )
                 Text(
-                    "Current Savings",
+                    "Total Savings",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -322,6 +467,7 @@ fun AnimatedSavingsCard(savings: Double) {
         }
     }
 }
+
 @Composable
 fun SavingsHistoryChart(history: List<Savings>) {
     if (history.isEmpty()) {
@@ -368,7 +514,6 @@ fun SavingsHistoryChart(history: List<Savings>) {
                     val minSavings = history.minOfOrNull { it.amount } ?: 0.0
                     val range = maxSavings - minSavings
 
-                    // Draw grid lines
                     for (i in 0..4) {
                         val y = size.height * (1 - i * 0.25f)
                         drawLine(
@@ -382,7 +527,6 @@ fun SavingsHistoryChart(history: List<Savings>) {
                     val path = Path()
                     val gradientPath = Path()
 
-                    // Use a regular for loop instead of forEachIndexed
                     for (index in history.indices) {
                         val savings = history[index]
                         val x = (index.toFloat() / (history.size - 1).coerceAtLeast(1).toFloat()) * size.width
@@ -400,71 +544,32 @@ fun SavingsHistoryChart(history: List<Savings>) {
                             gradientPath.lineTo(x, y)
                         }
 
-                        // Draw data points
                         drawCircle(
-                            color = Color(0xFF2196F3), // Blue color
+                            color = Color(0xFF2196F3),
                             radius = 4f,
                             center = Offset(x, y)
                         )
                     }
 
-                    // Complete gradient path
                     gradientPath.lineTo(size.width, size.height)
                     gradientPath.lineTo(0f, size.height)
                     gradientPath.close()
 
-                    // Draw gradient area
                     drawPath(
                         path = gradientPath,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF2196F3).copy(alpha = 0.3f), // Blue with alpha
+                                Color(0xFF2196F3).copy(alpha = 0.3f),
                                 Color.Transparent
                             )
                         )
                     )
 
-                    // Draw line
                     drawPath(
                         path = path,
-                        color = Color(0xFF2196F3), // Blue color
+                        color = Color(0xFF2196F3),
                         style = Stroke(width = 3f)
                     )
-                }
-            }
-        }
-    }
-}
-@Composable
-fun QuickAmountButtons(onAmountSelected: (Double) -> Unit) {
-    val quickAmounts = listOf(100.0, 500.0, 1000.0, 2000.0, 5000.0)
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Quick Amounts",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            quickAmounts.forEach { amount ->
-                Button(
-                    onClick = { onAmountSelected(amount) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(CurrencyManager.format(amount.toDouble()))
                 }
             }
         }
@@ -474,6 +579,7 @@ fun QuickAmountButtons(onAmountSelected: (Double) -> Unit) {
 @Composable
 fun SavingsHistoryList(
     history: List<Savings>,
+    accounts: List<Account>,
     onDelete: (Savings) -> Unit = {}
 ) {
     Card(
@@ -496,7 +602,7 @@ fun SavingsHistoryList(
                 modifier = Modifier.weight(1f)
             ) {
                 items(history.reversed()) { savings ->
-                    SavingsHistoryItem(savings = savings, onDelete = onDelete)
+                    SavingsHistoryItem(savings = savings, accounts = accounts, onDelete = onDelete)
                 }
             }
         }
@@ -504,8 +610,15 @@ fun SavingsHistoryList(
 }
 
 @Composable
-fun SavingsHistoryItem(savings: Savings, onDelete: (Savings) -> Unit = {}) {
+fun SavingsHistoryItem(
+    savings: Savings,
+    accounts: List<Account>,
+    onDelete: (Savings) -> Unit = {}
+) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    val accountName = savings.accountId?.let { id ->
+        accounts.find { it.id == id }?.let { it.nickname ?: it.name }
+    }
 
     Card(
         modifier = Modifier
@@ -527,11 +640,21 @@ fun SavingsHistoryItem(savings: Savings, onDelete: (Savings) -> Unit = {}) {
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
-                Text(
-                    text = "${dateFormat.format(Date(savings.timestamp))} • ${savings.category}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${dateFormat.format(Date(savings.timestamp))} • ${savings.category}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    if (accountName != null) {
+                        Text(
+                            text = " • $accountName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
             Text(
                 text = CurrencyManager.format(kotlin.math.abs(savings.amount)),
@@ -611,12 +734,18 @@ fun SavingsStatsCards(stats: SavingsStats) {
 
 @Composable
 fun AddTransactionDialog(
+    accounts: List<Account>,
     onDismiss: () -> Unit,
-    onAdd: (Double, String, Boolean) -> Unit
+    onAdd: (Double, String, Boolean, Long?) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var isWithdrawal by remember { mutableStateOf(false) }
+    var selectedAccountId by remember { mutableStateOf<Long?>(null) }
+
+    val savingsAccounts = remember(accounts) {
+        accounts.filter { it.provider == com.rudra.smartworktracker.data.entity.AccountProvider.SAVINGS }
+    }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -652,16 +781,62 @@ fun AddTransactionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    androidx.compose.material3.FilterChip(
+                    FilterChip(
                         selected = !isWithdrawal,
                         onClick = { isWithdrawal = false },
                         label = { Text("Deposit") }
                     )
-                    androidx.compose.material3.FilterChip(
+                    FilterChip(
                         selected = isWithdrawal,
                         onClick = { isWithdrawal = true },
                         label = { Text("Withdrawal") }
                     )
+                }
+
+                // Account picker
+                if (savingsAccounts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Link to Account (Optional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    savingsAccounts.forEach { account ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedAccountId = if (selectedAccountId == account.id) null else account.id
+                                }
+                                .background(
+                                    if (selectedAccountId == account.id)
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    else Color.Transparent
+                                )
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(account.provider.icon())
+                            Text(
+                                account.nickname ?: account.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (selectedAccountId == account.id) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -669,7 +844,7 @@ fun AddTransactionDialog(
             TextButton(
                 onClick = {
                     amount.toDoubleOrNull()?.let { validAmount ->
-                        onAdd(validAmount, note, isWithdrawal)
+                        onAdd(validAmount, note, isWithdrawal, selectedAccountId)
                     }
                 },
                 enabled = amount.toDoubleOrNull() ?: 0.0 > 0

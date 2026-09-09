@@ -17,6 +17,9 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(private val context: Context) {
 
     private val mealRateKey = doublePreferencesKey("meal_rate")
+    private val overtimeRateKey = doublePreferencesKey("overtime_rate")
+    private val dailyWorkHoursKey = doublePreferencesKey("daily_work_hours")
+    private val workingDaysPerWeekKey = intPreferencesKey("working_days_per_week")
     private val darkThemeKey = booleanPreferencesKey(DARK_THEME)
     private val notificationsKey = booleanPreferencesKey(NOTIFICATIONS)
     private val vibrationKey = booleanPreferencesKey(VIBRATION)
@@ -34,6 +37,36 @@ class SettingsRepository(private val context: Context) {
     suspend fun setMealRate(rate: Double) {
         context.dataStore.edit {
             it[mealRateKey] = rate
+        }
+    }
+
+    val overtimeRate: Flow<Double> = context.dataStore.data.map {
+        it[overtimeRateKey] ?: 100.0
+    }
+
+    suspend fun setOvertimeRate(rate: Double) {
+        context.dataStore.edit {
+            it[overtimeRateKey] = rate
+        }
+    }
+
+    val dailyWorkHours: Flow<Double> = context.dataStore.data.map {
+        it[dailyWorkHoursKey] ?: 9.0
+    }
+
+    suspend fun setDailyWorkHours(hours: Double) {
+        context.dataStore.edit {
+            it[dailyWorkHoursKey] = hours
+        }
+    }
+
+    val workingDaysPerWeek: Flow<Int> = context.dataStore.data.map {
+        it[workingDaysPerWeekKey] ?: 5
+    }
+
+    suspend fun setWorkingDaysPerWeek(days: Int) {
+        context.dataStore.edit {
+            it[workingDaysPerWeekKey] = days
         }
     }
 
@@ -140,5 +173,9 @@ class SettingsRepository(private val context: Context) {
         const val AUTO_BACKUP = "auto_backup"
         const val BIOMETRIC = "biometric"
         const val CURRENCY = "currency"
+        const val MEAL_RATE = "meal_rate"
+        const val OVERTIME_RATE = "overtime_rate"
+        const val DAILY_WORK_HOURS = "daily_work_hours"
+        const val WORKING_DAYS_PER_WEEK = "working_days_per_week"
     }
 }

@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
+import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.Savings
+import com.rudra.smartworktracker.data.repository.AccountRepository
 import com.rudra.smartworktracker.data.repository.SavingsRepository
 import com.rudra.smartworktracker.utils.CurrencyManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,10 +43,16 @@ data class EnhancedSavingsUiState(
     val selectedTimeRange: TimeRange = TimeRange.ALL,
     val searchQuery: String = "",
     val sortOrder: SortOrder = SortOrder.DESCENDING,
-    val stats: SavingsStats = SavingsStats()
+    val stats: SavingsStats = SavingsStats(),
+    val accounts: List<Account> = emptyList(),
+    val selectedAccountId: Long? = null,
+    val accountSavings: Map<Long, Double> = emptyMap()
 )
 
-class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewModel() {
+class SavingsViewModel(
+    private val savingsRepository: SavingsRepository,
+    private val accountRepository: AccountRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EnhancedSavingsUiState())
     val uiState: StateFlow<EnhancedSavingsUiState> = _uiState.asStateFlow()
@@ -58,10 +66,16 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
             _uiState.value = _uiState.value.copy(isLoading = true)
             combine(
                 savingsRepository.getSavings(),
-                savingsRepository.getSavingsHistory()
-            ) { savings, history ->
+                savingsRepository.getSavingsHistory(),
+                accountRepository.getAllAccounts()
+            ) { savings, history, accounts ->
                 val filtered = filterAndSortHistory(history, TimeRange.ALL, SortOrder.DESCENDING)
                 val stats = calculateStats(history)
+                val accountSavings = mutableMapOf<Long, Double>()
+                accounts.forEach { account ->
+                    val total = history.filter { it.accountId == account.id }.sumOf { it.amount }
+                    if (total != 0.0) accountSavings[account.id] = total
+                }
                 EnhancedSavingsUiState(
                     savings = savings ?: 0.0,
                     savingsHistory = history,
@@ -69,7 +83,9 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
                     isLoading = false,
                     stats = stats,
                     selectedTimeRange = TimeRange.ALL,
-                    sortOrder = SortOrder.DESCENDING
+                    sortOrder = SortOrder.DESCENDING,
+                    accounts = accounts,
+                    accountSavings = accountSavings
                 )
             }.catch { exception ->
                 _uiState.value = _uiState.value.copy(
@@ -106,8 +122,10 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         timeRange: TimeRange,
         sortOrder: SortOrder
     ): List<Savings> {
+        val selectedAccountId = _uiState.value.selectedAccountId
         val filtered = history.filter { savings ->
-            when (timeRange) {
+            val matchesAccount = selectedAccountId == null || savings.accountId == selectedAccountId
+            val matchesTime = when (timeRange) {
                 TimeRange.ALL -> true
                 TimeRange.TODAY -> {
                     val calendar = Calendar.getInstance()
@@ -145,6 +163,7 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
                     savings.timestamp >= calendar.timeInMillis
                 }
             }
+            matchesAccount && matchesTime
         }.filter { savings ->
             _uiState.value.searchQuery.isEmpty() ||
                     savings.note?.contains(_uiState.value.searchQuery, ignoreCase = true) == true
@@ -164,6 +183,12 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         )
     }
 
+    fun selectAccount(accountId: Long?) {
+        _uiState.value = _uiState.value.copy(selectedAccountId = accountId)
+        val filtered = filterAndSortHistory(_uiState.value.savingsHistory, _uiState.value.selectedTimeRange, _uiState.value.sortOrder)
+        _uiState.value = _uiState.value.copy(filteredHistory = filtered)
+    }
+
     fun searchTransactions(query: String) {
         val filtered = filterAndSortHistory(_uiState.value.savingsHistory, _uiState.value.selectedTimeRange, _uiState.value.sortOrder)
         _uiState.value = _uiState.value.copy(
@@ -181,7 +206,7 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         )
     }
 
-    fun addToSavings(amount: Double, note: String = "") {
+    fun addToSavings(amount: Double, note: String = "", accountId: Long? = null) {
         if (amount <= 0) {
             _uiState.value = _uiState.value.copy(errorMessage = "Amount must be greater than 0")
             return
@@ -189,7 +214,11 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
 
         viewModelScope.launch {
             try {
-                savingsRepository.addToSavings(amount, note)
+                savingsRepository.addToSavings(amount, note, accountId = accountId)
+                // Update account balance if linked
+                if (accountId != null) {
+                    accountRepository.addIncomeToAccount(accountId, amount)
+                }
                 _uiState.value = _uiState.value.copy(successMessage = "Successfully added ${CurrencyManager.format(amount)}")
                 clearMessages()
             } catch (e: Exception) {
@@ -198,7 +227,7 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
         }
     }
 
-    fun withdrawFromSavings(amount: Double, note: String = "") {
+    fun withdrawFromSavings(amount: Double, note: String = "", accountId: Long? = null) {
         if (amount <= 0) {
             _uiState.value = _uiState.value.copy(errorMessage = "Amount must be greater than 0")
             return
@@ -211,7 +240,11 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
 
         viewModelScope.launch {
             try {
-                savingsRepository.withdrawFromSavings(amount, note)
+                savingsRepository.withdrawFromSavings(amount, note, accountId = accountId)
+                // Deduct from account balance if linked
+                if (accountId != null) {
+                    accountRepository.deductExpenseFromAccount(accountId, amount)
+                }
                 _uiState.value = _uiState.value.copy(successMessage = "Successfully withdrew ${CurrencyManager.format(amount)}")
                 clearMessages()
             } catch (e: Exception) {
@@ -223,6 +256,14 @@ class SavingsViewModel(private val savingsRepository: SavingsRepository) : ViewM
     fun deleteTransaction(savings: Savings) {
         viewModelScope.launch {
             try {
+                // Reverse balance impact if linked to account
+                if (savings.accountId != null) {
+                    if (savings.amount > 0) {
+                        accountRepository.deductExpenseFromAccount(savings.accountId, savings.amount)
+                    } else {
+                        accountRepository.addIncomeToAccount(savings.accountId, kotlin.math.abs(savings.amount))
+                    }
+                }
                 savingsRepository.deleteTransaction(savings)
                 _uiState.value = _uiState.value.copy(successMessage = "Transaction deleted")
                 clearMessages()

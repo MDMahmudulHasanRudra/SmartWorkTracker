@@ -44,4 +44,25 @@ interface SavingsDao {
 
     @Query("DELETE FROM savings")
     suspend fun deleteAll()
+
+    // Account-linked queries
+    @Query("SELECT * FROM savings WHERE accountId = :accountId ORDER BY timestamp DESC")
+    fun getSavingsByAccount(accountId: Long): Flow<List<Savings>>
+
+    @Query("SELECT SUM(amount) FROM savings WHERE accountId = :accountId")
+    fun getTotalSavingsByAccount(accountId: Long): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM savings WHERE accountId = :accountId AND timestamp BETWEEN :startTime AND :endTime")
+    fun getSavingsByAccountBetween(accountId: Long, startTime: Long, endTime: Long): Flow<Double?>
+
+    @Query("SELECT accountId, SUM(amount) as total FROM savings GROUP BY accountId")
+    fun getSavingsByAllAccounts(): Flow<List<AccountSavingsTotal>>
+
+    @Query("SELECT * FROM savings WHERE accountId IS NULL ORDER BY timestamp DESC")
+    fun getSavingsWithoutAccount(): Flow<List<Savings>>
 }
+
+data class AccountSavingsTotal(
+    val accountId: Long?,
+    val total: Double
+)

@@ -57,7 +57,7 @@ import com.rudra.smartworktracker.model.*
     views = [
         MonthlySummary::class
     ],
-    version = 11, // v11: Added bill_splits table
+    version = 12, // v12: Added accountId to savings for account linkage
     exportSchema = false
 )
 @TypeConverters(LocalTypeConverters::class, Converters::class)

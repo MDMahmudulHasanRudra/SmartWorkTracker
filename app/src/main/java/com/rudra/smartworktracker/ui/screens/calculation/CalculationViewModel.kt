@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
 import com.rudra.smartworktracker.data.entity.Calculation
 import com.rudra.smartworktracker.data.entity.TravelAndExpense
+import com.rudra.smartworktracker.data.repository.SettingsRepository
 import com.rudra.smartworktracker.model.WorkType
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -34,7 +35,10 @@ data class CalculationUiState(
     val monthlyBreakdown: List<Pair<String, Double>> = emptyList()
 )
 
-class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
+class CalculationViewModel(
+    private val db: AppDatabase,
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalculationUiState())
     val uiState: StateFlow<CalculationUiState> = _uiState.asStateFlow()
@@ -51,15 +55,11 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
             _uiState.update { it.copy(isLoading = true) }
             try {
                 combine(
-                    db.calculationDao().getCalculation(),
+                    settingsRepository.mealRate,
                     db.travelExpenseDao().getTravelExpense()
-                ) { calc, travelExpense ->
-                    Pair(calc, travelExpense)
-                }.collectLatest { (calc, travelExp) ->
-                    val currentCalc = calc ?: Calculation(
-                        dailyMealRate = 58.0,
-                        lastUpdated = System.currentTimeMillis()
-                    )
+                ) { mealRate, travelExpense ->
+                    Pair(mealRate, travelExpense)
+                }.collectLatest { (mealRate, travelExp) ->
                     val currentTravelExp = travelExp ?: TravelAndExpense(
                         dailyTravelCost = 150.0,
                         otherExpenses = 0.0,
@@ -67,10 +67,14 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
                         lastUpdated = System.currentTimeMillis()
                     )
 
-                    _uiState.update { it.copy(calculation = currentCalc, travelExpense = currentTravelExp) }
+                    val calc = Calculation(
+                        dailyMealRate = mealRate,
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                    _uiState.update { it.copy(calculation = calc, travelExpense = currentTravelExp) }
 
-                    fetchWorkLogData(currentCalc.dailyMealRate, currentTravelExp, _uiState.value.selectedDate)
-                    fetchMonthlyBreakdown(currentCalc.dailyMealRate, currentTravelExp)
+                    fetchWorkLogData(mealRate, currentTravelExp, _uiState.value.selectedDate)
+                    fetchMonthlyBreakdown(mealRate, currentTravelExp)
                 }
             } catch (e: Exception) {
                 _errorMessage.emit("Failed to load data: ${e.message}")
@@ -202,16 +206,13 @@ class CalculationViewModel(private val db: AppDatabase) : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val currentCalculation = _uiState.value.calculation ?: Calculation(
-                    dailyMealRate = 58.0,
-                    lastUpdated = System.currentTimeMillis()
-                )
-                val updatedCalculation = currentCalculation.copy(
+                settingsRepository.setMealRate(rate)
+
+                val calc = Calculation(
                     dailyMealRate = rate,
                     lastUpdated = System.currentTimeMillis()
                 )
-                db.calculationDao().insert(updatedCalculation)
-                _uiState.update { it.copy(calculation = updatedCalculation) }
+                _uiState.update { it.copy(calculation = calc) }
 
                 fetchWorkLogData(rate, _uiState.value.travelExpense ?: TravelAndExpense(), _uiState.value.selectedDate)
                 fetchMonthlyBreakdown(rate, _uiState.value.travelExpense ?: TravelAndExpense())

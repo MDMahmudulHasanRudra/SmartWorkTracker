@@ -11,6 +11,7 @@ data class Savings(
     val note: String = "",
     val category: String = "General",
     val timestamp: Long,
+    val accountId: Long? = null,
 
     // UUID field for future primary key transition - Rule 1.1
     val uuid: String? = null,

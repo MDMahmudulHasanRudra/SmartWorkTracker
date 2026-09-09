@@ -40,9 +40,18 @@ fun SettingsScreen(navController: NavController) {
 
     var showResetDialog by remember { mutableStateOf(false) }
     var showMealRateDialog by remember { mutableStateOf(false) }
+    var showOvertimeRateDialog by remember { mutableStateOf(false) }
+    var showDailyWorkHoursDialog by remember { mutableStateOf(false) }
+    var showWorkingDaysPerWeekDialog by remember { mutableStateOf(false) }
 
     val mealRate by viewModel.mealRate.collectAsState()
     var newMealRate by remember(mealRate) { mutableStateOf(mealRate.toString()) }
+    val overtimeRate by viewModel.overtimeRate.collectAsState()
+    var newOvertimeRate by remember(overtimeRate) { mutableStateOf(overtimeRate.toString()) }
+    val dailyWorkHours by viewModel.dailyWorkHours.collectAsState()
+    var newDailyWorkHours by remember(dailyWorkHours) { mutableStateOf(dailyWorkHours.toString()) }
+    val workingDaysPerWeek by viewModel.workingDaysPerWeek.collectAsState()
+    var newWorkingDaysPerWeek by remember(workingDaysPerWeek) { mutableStateOf(workingDaysPerWeek.toString()) }
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
@@ -171,6 +180,24 @@ fun SettingsScreen(navController: NavController) {
                         title = "Meal Rate",
                         subtitle = "Current: ${CurrencyManager.format(mealRate).removePrefix(CurrencyManager.symbol())} per meal",
                         onClick = { showMealRateDialog = true }
+                    )
+                    SettingsItem(
+                        icon = Icons.Default.AttachMoney,
+                        title = "Overtime Rate",
+                        subtitle = "Current: ${CurrencyManager.format(overtimeRate).removePrefix(CurrencyManager.symbol())} per hour",
+                        onClick = { showOvertimeRateDialog = true }
+                    )
+                    SettingsItem(
+                        icon = Icons.Default.AccessTime,
+                        title = "Daily Work Hours",
+                        subtitle = "Current: $dailyWorkHours hours",
+                        onClick = { showDailyWorkHoursDialog = true }
+                    )
+                    SettingsItem(
+                        icon = Icons.Default.CalendarMonth,
+                        title = "Working Days / Week",
+                        subtitle = "Current: $workingDaysPerWeek days",
+                        onClick = { showWorkingDaysPerWeekDialog = true }
                     )
                 }
             }
@@ -399,6 +426,204 @@ fun SettingsScreen(navController: NavController) {
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Overtime Rate Dialog
+    if (showOvertimeRateDialog) {
+        AlertDialog(
+            onDismissRequest = { showOvertimeRateDialog = false },
+            title = {
+                Text(
+                    "Set Overtime Rate",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Set the hourly rate for overtime work",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = newOvertimeRate,
+                        onValueChange = {
+                            if (it.isEmpty() || it.toDoubleOrNull() != null) {
+                                newOvertimeRate = it
+                            }
+                        },
+                        label = { Text("Overtime Rate") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        prefix = { Text(CurrencyManager.symbol()) }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        newOvertimeRate.toDoubleOrNull()?.let { rate ->
+                            if (rate >= 0) {
+                                viewModel.setOvertimeRate(rate)
+                                showOvertimeRateDialog = false
+                            }
+                        }
+                    },
+                    enabled = newOvertimeRate.toDoubleOrNull() != null && newOvertimeRate.toDoubleOrNull()!! >= 0,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showOvertimeRateDialog = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Daily Work Hours Dialog
+    if (showDailyWorkHoursDialog) {
+        AlertDialog(
+            onDismissRequest = { showDailyWorkHoursDialog = false },
+            title = {
+                Text(
+                    "Set Daily Work Hours",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Standard number of work hours per day",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = newDailyWorkHours,
+                        onValueChange = {
+                            if (it.isEmpty() || it.toDoubleOrNull() != null) {
+                                newDailyWorkHours = it
+                            }
+                        },
+                        label = { Text("Hours") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        suffix = { Text("hrs") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        newDailyWorkHours.toDoubleOrNull()?.let { hours ->
+                            if (hours > 0) {
+                                viewModel.setDailyWorkHours(hours)
+                                showDailyWorkHoursDialog = false
+                            }
+                        }
+                    },
+                    enabled = newDailyWorkHours.toDoubleOrNull() != null && newDailyWorkHours.toDoubleOrNull()!! > 0,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDailyWorkHoursDialog = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Working Days Per Week Dialog
+    if (showWorkingDaysPerWeekDialog) {
+        val dayOptions = listOf(1, 2, 3, 4, 5, 6, 7)
+        AlertDialog(
+            onDismissRequest = { showWorkingDaysPerWeekDialog = false },
+            title = {
+                Text(
+                    "Set Working Days / Week",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Number of working days per week",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    dayOptions.forEach { day ->
+                        val isSelected = day == workingDaysPerWeek
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
+                                .clickable {
+                                    viewModel.setWorkingDaysPerWeek(day)
+                                    showWorkingDaysPerWeekDialog = false
+                                },
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "$day day${if (day > 1) "s" else ""}",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { showWorkingDaysPerWeekDialog = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Close")
                 }
             },
             shape = RoundedCornerShape(20.dp)

@@ -10,6 +10,7 @@ import com.rudra.smartworktracker.utils.CurrencyManager
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -20,7 +21,8 @@ class SettingsViewModel(
     private val incomeRepository: IncomeRepository,
     private val expenseRepository: ExpenseRepository,
     private val settingsRepository: SettingsRepository,
-    private val savingsRepository: SavingsRepository
+    private val savingsRepository: SavingsRepository,
+    private val mealOvertimeRepository: MealOvertimeRepository
 ) : AndroidViewModel(application) {
 
     private val backupManager = BackupManager(application)
@@ -71,10 +73,26 @@ class SettingsViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = "BDT"
     )
+    val overtimeRate = settingsRepository.overtimeRate.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 100.0
+    )
+    val dailyWorkHours = settingsRepository.dailyWorkHours.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 9.0
+    )
+    val workingDaysPerWeek = settingsRepository.workingDaysPerWeek.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 5
+    )
 
     fun setMealRate(rate: Double) {
         viewModelScope.launch {
             settingsRepository.setMealRate(rate)
+            syncRoomSettings()
         }
     }
 
@@ -113,6 +131,42 @@ class SettingsViewModel(
             settingsRepository.setCurrency(currencyCode)
             CurrencyManager.setCurrency(currencyCode)
         }
+    }
+
+    fun setOvertimeRate(rate: Double) {
+        viewModelScope.launch {
+            settingsRepository.setOvertimeRate(rate)
+            syncRoomSettings()
+        }
+    }
+
+    fun setDailyWorkHours(hours: Double) {
+        viewModelScope.launch {
+            settingsRepository.setDailyWorkHours(hours)
+            syncRoomSettings()
+        }
+    }
+
+    fun setWorkingDaysPerWeek(days: Int) {
+        viewModelScope.launch {
+            settingsRepository.setWorkingDaysPerWeek(days)
+            syncRoomSettings()
+        }
+    }
+
+    private suspend fun syncRoomSettings() {
+        val mealRate = settingsRepository.mealRate.first()
+        val overtimeRate = settingsRepository.overtimeRate.first()
+        val dailyWorkHours = settingsRepository.dailyWorkHours.first()
+        val workingDaysPerWeek = settingsRepository.workingDaysPerWeek.first()
+        mealOvertimeRepository.saveSettings(
+            com.rudra.smartworktracker.data.entity.Settings(
+                mealRate = mealRate,
+                overtimeRate = overtimeRate,
+                dailyWorkHours = dailyWorkHours,
+                workingDaysPerWeek = workingDaysPerWeek
+            )
+        )
     }
 
     fun createBackup(uri: Uri) {
