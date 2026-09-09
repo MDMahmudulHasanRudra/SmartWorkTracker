@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -486,26 +487,7 @@ fun MainApp() {
                     )
                 }
             },
-            floatingActionButton = {
-                if (shouldShowBars && currentRoute != NavigationItem.AddEntry.route) {
-                    FloatingActionButton(
-                        onClick = { navController.navigate(NavigationItem.AddEntry.route) },
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        shape = CircleShape,
-                        elevation = FloatingActionButtonDefaults.elevation(
-                            defaultElevation = 6.dp,
-                            pressedElevation = 12.dp
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "Add Entry",
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-            }
+            floatingActionButton = {}
         ) { paddingValues ->
             NavHost(
                 navController = navController,
@@ -967,86 +949,129 @@ fun AppBottomNavigation(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val selectedIndex = bottomItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
     Surface(
         modifier = modifier,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
-            bottomItems.forEachIndexed { index, item ->
-                val isSelected = currentRoute == item.route
+            // Sliding indicator pill
+            val indicatorWidth = 56.dp
+            val itemSpacing = 72.dp
+            val indicatorOffset by animateDpAsState(
+                targetValue = (selectedIndex * itemSpacing.value).dp,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                ),
+                label = "indicatorOffset"
+            )
 
-                val animatedColor by animateColorAsState(
-                    targetValue = if (isSelected)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "navColor"
-                )
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset + 16.dp)
+                    .width(indicatorWidth)
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
+            )
 
-                val animatedSize by animateDpAsState(
-                    targetValue = if (isSelected) 28.dp else 24.dp,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    label = "navSize"
-                )
+            // Nav items row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                bottomItems.forEach { item ->
+                    val isSelected = currentRoute == item.route
 
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isSelected)
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            else
-                                Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                        .then(
-                            if (index == 2) Modifier // spacer for center FAB gap
-                            else Modifier
-                        )
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.title,
-                            modifier = Modifier.size(animatedSize),
-                            tint = animatedColor
-                        )
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = if (isSelected) 11.sp else 10.sp
-                            ),
-                            color = animatedColor,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                // Add spacing around the center FAB area
-                if (index == 1) {
-                    Spacer(modifier = Modifier.width(48.dp))
+                    BottomNavItem(
+                        item = item,
+                        isSelected = isSelected,
+                        onClick = {
+                            if (currentRoute != item.route) {
+                                navController.navigate(item.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    item: NavigationItem,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val animatedIconSize by animateDpAsState(
+        targetValue = if (isSelected) 26.dp else 22.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "iconSize"
+    )
+
+    val animatedColor by animateColorAsState(
+        targetValue = if (isSelected)
+            MaterialTheme.colorScheme.primary
+        else
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "iconColor"
+    )
+
+    val animatedFontWeight = animateFloatAsState(
+        targetValue = if (isSelected) FontWeight.Bold.weight.toFloat() else FontWeight.Medium.weight.toFloat(),
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "fontWeight"
+    )
+
+    Box(
+        modifier = Modifier
+            .width(64.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = item.title,
+                modifier = Modifier.size(animatedIconSize),
+                tint = animatedColor
+            )
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight(animatedFontWeight.value.toInt()),
+                    fontSize = if (isSelected) 11.sp else 10.sp,
+                    letterSpacing = 0.2.sp
+                ),
+                color = animatedColor,
+                maxLines = 1
+            )
         }
     }
 }

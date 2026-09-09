@@ -57,25 +57,31 @@ fun DashboardScreen(
             // 3. Today Snapshot
             item { TodaySnapshot(financialSummary = uiState.financialSummary) }
 
-            // 4. Monthly Donut Chart
+            // 4. Monthly Income vs Expense Comparison
+            item { MonthlyComparisonBar(financialSummary = uiState.financialSummary) }
+
+            // 5. Savings Goal
+            item { SavingsGoalCard(financialSummary = uiState.financialSummary) }
+
+            // 6. Monthly Donut Chart
             item { MonthlyDonutChart(expensesByCategory = uiState.expensesByCategory) }
 
-            // 5. Weekly Spending Trend
+            // 7. Weekly Spending Trend
             item { WeeklySpendingTrend(expenses = uiState.expenses) }
 
-            // 6. Expense Categories
+            // 8. Expense Categories
             item { ExpenseCategories(expensesByCategory = uiState.expensesByCategory) }
 
-            // 7. Today's Expense Breakdown
-            item { TodayExpenseBreakdown(expenses = uiState.expenses) }
-
-            // 8. Work Stats Grid
+            // 9. Work Stats Grid
             item { WorkStatsGrid(stats = uiState.monthlyStats) }
 
-            // 9. Weekly Activity Bars
+            // 10. Weekly Activity Bars
             item { WeeklyActivityBars(workLogs = uiState.workLogs) }
 
-            // 10. Recent Activity Timeline
+            // 11. Today's Expense Breakdown
+            item { TodayExpenseBreakdown(expenses = uiState.expenses) }
+
+            // 12. Recent Activity Timeline
             if (hasRecentActivities) {
                 item { RecentActivityTimeline(activities = uiState.recentActivities) }
             }
