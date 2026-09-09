@@ -23,7 +23,8 @@ data class DashboardUiState(
     val errorMessage: String? = null,
     val incomes: List<Income> = emptyList(),
     val expenses: List<Expense> = emptyList(),
-    val workLogs: List<WorkLog> = emptyList()
+    val workLogs: List<WorkLog> = emptyList(),
+    val accounts: List<com.rudra.smartworktracker.data.entity.Account> = emptyList()
 )
 
 data class MonthlyStats(

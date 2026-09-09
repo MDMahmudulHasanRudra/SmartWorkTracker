@@ -5,24 +5,50 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rudra.smartworktracker.data.entity.Account
+import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.ui.components.AnimatedDoubleCounter
 import com.rudra.smartworktracker.ui.FinancialSummary
+import com.rudra.smartworktracker.utils.CurrencyManager
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NetWorthHeroCard(financialSummary: FinancialSummary) {
+fun NetWorthHeroCard(
+    financialSummary: FinancialSummary,
+    accounts: List<Account> = emptyList()
+) {
+    var selectedAccountId by remember { mutableStateOf<Long?>(null) }
+    var accountDropdownExpanded by remember { mutableStateOf(false) }
+
     val netWorth = financialSummary.allTimeIncome - financialSummary.allTimeExpense
-    val isPositive = netWorth >= 0
+
+    val displayLabel: String
+    val displayValue: Double
+    val isPositive: Boolean
+
+    if (selectedAccountId == null) {
+        displayLabel = "Net Worth"
+        displayValue = netWorth
+        isPositive = netWorth >= 0
+    } else {
+        val selectedAccount = accounts.find { it.id == selectedAccountId }
+        displayLabel = selectedAccount?.let { "${it.type.displayName()} Balance" } ?: "Balance"
+        displayValue = selectedAccount?.balance ?: 0.0
+        isPositive = displayValue >= 0
+    }
+
     val incomeColor = Color(0xFF4CAF50)
     val expenseColor = MaterialTheme.colorScheme.error
 
@@ -39,15 +65,97 @@ fun NetWorthHeroCard(financialSummary: FinancialSummary) {
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            Text(
-                text = "Net Worth",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Account selector dropdown
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = displayLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (accounts.isNotEmpty()) {
+                    Box {
+                        TextButton(
+                            onClick = { accountDropdownExpanded = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = selectedAccountId?.let {
+                                    accounts.find { a -> a.id == it }?.name ?: "All"
+                                } ?: "All",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = accountDropdownExpanded,
+                            onDismissRequest = { accountDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("Total Net Worth", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            text = CurrencyManager.format(netWorth),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedAccountId = null
+                                    accountDropdownExpanded = false
+                                }
+                            )
+                            HorizontalDivider()
+                            accounts.filter { it.isActive }.forEach { account ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                text = account.name,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = "${account.type.displayName()} \u2022 ${CurrencyManager.format(account.balance)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedAccountId = account.id
+                                        accountDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             AnimatedDoubleCounter(
-                targetValue = netWorth,
+                targetValue = displayValue,
                 prefix = "\u09F3",
                 color = if (isPositive) incomeColor else expenseColor,
                 fontSize = 32.sp,

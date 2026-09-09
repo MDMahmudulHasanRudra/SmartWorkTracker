@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
+import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.repository.*
 import com.rudra.smartworktracker.model.Expense
 import com.rudra.smartworktracker.model.ExpenseByCategory
@@ -29,7 +30,8 @@ class DashboardViewModel(
     private val incomeRepository: IncomeRepository,
     private val savingsRepository: SavingsRepository,
     private val settingsRepository: SettingsRepository,
-    private val userProfileRepository: UserProfileRepository
+    private val userProfileRepository: UserProfileRepository,
+    private val accountRepository: AccountRepository? = null
 ) : ViewModel() {
 
     private val _uiSate = MutableStateFlow(DashboardUiState())
@@ -37,6 +39,15 @@ class DashboardViewModel(
 
     init {
         loadDashboardData()
+        loadAccounts()
+    }
+
+    private fun loadAccounts() {
+        viewModelScope.launch {
+            accountRepository?.getAllAccounts()?.collect { accounts ->
+                _uiSate.value = _uiSate.value.copy(accounts = accounts)
+            }
+        }
     }
 
     private fun loadDashboardData() {
@@ -247,7 +258,8 @@ class DashboardViewModel(
                         val savingsRepository = SavingsRepository(appDatabase.savingsDao())
                         val settingsRepository = SettingsRepository(context)
                         val userProfileRepository = UserProfileRepository(appDatabase.userProfileDao())
-                        return DashboardViewModel(workLogRepository, expenseRepository, incomeRepository, savingsRepository, settingsRepository, userProfileRepository) as T
+                        val accountRepository = AccountRepository(appDatabase.accountDao())
+                        return DashboardViewModel(workLogRepository, expenseRepository, incomeRepository, savingsRepository, settingsRepository, userProfileRepository, accountRepository) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }

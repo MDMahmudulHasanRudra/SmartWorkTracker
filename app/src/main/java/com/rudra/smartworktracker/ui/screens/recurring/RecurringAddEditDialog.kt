@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.data.entity.AccountType
+import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.DayOfWeek
 import com.rudra.smartworktracker.data.entity.ExpenseCategories
 import com.rudra.smartworktracker.data.entity.IncomeCategories
@@ -624,20 +625,36 @@ fun StepAdvanced(
                     text = { Text("None") },
                     onClick = { onAccountIdChange(null); onAccountExpandedChange(false) }
                 )
-                accounts.filter { it.isActive }.forEach { account ->
+                val activeAccounts = accounts.filter { it.isActive }
+                val grouped = activeAccounts.groupBy { it.type }
+                grouped.forEach { (category, categoryAccounts) ->
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(account.name)
-                                Text(
-                                    text = com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = category.displayName(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         },
-                        onClick = { onAccountIdChange(account.id); onAccountExpandedChange(false) }
+                        onClick = {},
+                        enabled = false
                     )
+                    categoryAccounts.forEach { account ->
+                        DropdownMenuItem(
+                            text = {
+                                Column(modifier = Modifier.padding(start = 8.dp)) {
+                                    Text(account.name)
+                                    Text(
+                                        text = "${account.provider.displayName()} \u2022 ${com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = { onAccountIdChange(account.id); onAccountExpandedChange(false) }
+                        )
+                    }
                 }
             }
         }
@@ -680,20 +697,36 @@ fun StepAdvanced(
                         text = { Text("None") },
                         onClick = { onDestinationAccountIdChange(null); onDestinationAccountExpandedChange(false) }
                     )
-                    accounts.filter { it.isActive && it.id != selectedAccountId }.forEach { account ->
+                    val filteredAccounts = accounts.filter { it.isActive && it.id != selectedAccountId }
+                    val grouped = filteredAccounts.groupBy { it.type }
+                    grouped.forEach { (category, categoryAccounts) ->
                         DropdownMenuItem(
                             text = {
-                                Column {
-                                    Text(account.name)
-                                    Text(
-                                        text = com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Text(
+                                    text = category.displayName(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             },
-                            onClick = { onDestinationAccountIdChange(account.id); onDestinationAccountExpandedChange(false) }
+                            onClick = {},
+                            enabled = false
                         )
+                        categoryAccounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                                        Text(account.name)
+                                        Text(
+                                            text = "${account.provider.displayName()} \u2022 ${com.rudra.smartworktracker.utils.CurrencyManager.format(account.balance)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = { onDestinationAccountIdChange(account.id); onDestinationAccountExpandedChange(false) }
+                            )
+                        }
                     }
                 }
             }

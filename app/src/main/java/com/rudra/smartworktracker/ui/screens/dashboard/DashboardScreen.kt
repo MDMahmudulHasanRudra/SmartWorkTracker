@@ -52,7 +52,12 @@ fun DashboardScreen(
             item { DashboardHeader(userName = uiState.userName) }
 
             // 2. Net Worth Hero
-            item { NetWorthHeroCard(financialSummary = uiState.financialSummary) }
+            item {
+                NetWorthHeroCard(
+                    financialSummary = uiState.financialSummary,
+                    accounts = uiState.accounts
+                )
+            }
 
             // 3. Today Snapshot
             item { TodaySnapshot(financialSummary = uiState.financialSummary) }
