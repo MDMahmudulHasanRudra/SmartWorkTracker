@@ -2,6 +2,7 @@ package com.rudra.smartworktracker.ui.screens.dashboard
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,7 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -29,9 +32,25 @@ fun DashboardScreen(
         factory = DashboardViewModel.factory(AppDatabase.getDatabase(context), context)
     )
     val uiState by viewModel.uiState.collectAsState()
+    val heroColor by viewModel.heroColor.collectAsState()
+    val selectedAccountId by viewModel.selectedAccountId.collectAsState()
+
+    var showColorPicker by remember { mutableStateOf(false) }
 
     val hasRecentActivities by remember(uiState.recentActivities) {
         derivedStateOf { uiState.recentActivities.isNotEmpty() }
+    }
+
+    // Color picker bottom sheet
+    if (showColorPicker) {
+        HeroColorPickerSheet(
+            currentColor = heroColor,
+            onColorSelected = { color ->
+                viewModel.setHeroColor(color)
+                showColorPicker = false
+            },
+            onDismiss = { showColorPicker = false }
+        )
     }
 
     Scaffold(
@@ -59,7 +78,11 @@ fun DashboardScreen(
                     accounts = uiState.accounts,
                     todayWorkType = uiState.todayWorkType,
                     onWorkTypeClick = viewModel::updateTodayWorkType,
-                    onNavigateToAccounts = onNavigateToAccounts
+                    onNavigateToAccounts = onNavigateToAccounts,
+                    heroColor = heroColor,
+                    onColorPickerClick = { showColorPicker = true },
+                    selectedAccountId = selectedAccountId,
+                    onAccountSelected = { viewModel.setSelectedAccountId(it) }
                 )
             }
 
@@ -122,9 +145,7 @@ fun DashboardScreen(
 
             // Bottom spacer for FAB clearance
             item {
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.padding(bottom = 80.dp)
-                )
+                Spacer(modifier = Modifier.padding(bottom = 80.dp))
             }
         }
     }

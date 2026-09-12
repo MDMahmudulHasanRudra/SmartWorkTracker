@@ -29,6 +29,28 @@ class SettingsRepository(private val context: Context) {
     private val fontSizeKey = doublePreferencesKey("font_size")
     private val accentColorKey = intPreferencesKey("accent_color")
     private val dynamicColorKey = booleanPreferencesKey("dynamic_color")
+    private val heroColorKey = intPreferencesKey("hero_color")
+    private val selectedAccountIdKey = longPreferencesKey("selected_account_id")
+
+    val heroColor: Flow<Int> = context.dataStore.data.map {
+        it[heroColorKey] ?: 0
+    }
+
+    suspend fun setHeroColor(color: Int) {
+        context.dataStore.edit {
+            it[heroColorKey] = color
+        }
+    }
+
+    val selectedAccountId: Flow<Long> = context.dataStore.data.map {
+        it[selectedAccountIdKey] ?: -1L
+    }
+
+    suspend fun setSelectedAccountId(id: Long) {
+        context.dataStore.edit {
+            it[selectedAccountIdKey] = id
+        }
+    }
 
     val mealRate: Flow<Double> = context.dataStore.data.map {
         it[mealRateKey] ?: 60.0

@@ -37,9 +37,45 @@ class DashboardViewModel(
     private val _uiSate = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiSate.asStateFlow()
 
+    private val _heroColor = MutableStateFlow(0)
+    val heroColor: StateFlow<Int> = _heroColor.asStateFlow()
+
+    private val _selectedAccountId = MutableStateFlow(-1L)
+    val selectedAccountId: StateFlow<Long> = _selectedAccountId.asStateFlow()
+
     init {
+        loadHeroColor()
+        loadSelectedAccountId()
         loadDashboardData()
         loadAccounts()
+    }
+
+    private fun loadHeroColor() {
+        viewModelScope.launch {
+            settingsRepository.heroColor.collect { color ->
+                _heroColor.value = color
+            }
+        }
+    }
+
+    private fun loadSelectedAccountId() {
+        viewModelScope.launch {
+            settingsRepository.selectedAccountId.collect { id ->
+                _selectedAccountId.value = id
+            }
+        }
+    }
+
+    fun setHeroColor(color: Int) {
+        viewModelScope.launch {
+            settingsRepository.setHeroColor(color)
+        }
+    }
+
+    fun setSelectedAccountId(id: Long) {
+        viewModelScope.launch {
+            settingsRepository.setSelectedAccountId(id)
+        }
     }
 
     private fun loadAccounts() {

@@ -34,10 +34,8 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,8 +78,6 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val IncomeGreen = Color(0xFF10B981)
-private val ExpenseRed = Color(0xFFEF4444)
 private val AmberHighlight = Color(0xFFF59E0B)
 private val IndigoAccent = Color(0xFF6366F1)
 
@@ -93,7 +89,11 @@ fun DashboardHeroSection(
     accounts: List<Account>,
     todayWorkType: WorkType?,
     onWorkTypeClick: (WorkType) -> Unit,
-    onNavigateToAccounts: () -> Unit
+    onNavigateToAccounts: () -> Unit,
+    heroColor: Int = 0,
+    onColorPickerClick: () -> Unit = {},
+    selectedAccountId: Long = -1L,
+    onAccountSelected: (Long) -> Unit = {}
 ) {
     val displayName = remember(userName) { userName ?: "User" }
     val today = remember { LocalDate.now() }
@@ -109,15 +109,35 @@ fun DashboardHeroSection(
         today.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
     }
 
-    var selectedAccountId by remember { mutableStateOf<Long?>(null) }
+    val displayAccountId = if (selectedAccountId == -1L) null else selectedAccountId
     var accountDropdownExpanded by remember { mutableStateOf(false) }
     var showWorkTypeSelector by remember { mutableStateOf(false) }
 
     val netWorth = financialSummary.allTimeIncome - financialSummary.allTimeExpense
-    val selectedAccount = accounts.find { it.id == selectedAccountId }
-    val displayLabel = if (selectedAccountId == null) "Net Worth" else selectedAccount?.type?.let { it.displayName() } ?: "Balance"
-    val displayValue = if (selectedAccountId == null) netWorth else selectedAccount?.balance ?: 0.0
+    val selectedAccount = accounts.find { it.id == displayAccountId }
+    val displayLabel = if (displayAccountId == null) "Net Worth" else selectedAccount?.type?.let { it.displayName() } ?: "Balance"
+    val displayValue = if (displayAccountId == null) netWorth else selectedAccount?.balance ?: 0.0
     val isPositive = displayValue >= 0
+
+    val heroBrush = remember(heroColor) {
+        if (heroColor == 0) {
+            Brush.linearGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                    MaterialTheme.colorScheme.primary
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+            )
+        } else {
+            val c = Color(heroColor)
+            Brush.linearGradient(
+                colors = listOf(c.copy(alpha = 0.85f), c),
+                start = Offset(0f, 0f),
+                end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+            )
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -130,23 +150,14 @@ fun DashboardHeroSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                            MaterialTheme.colorScheme.primary
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                    )
-                )
+                .background(heroBrush)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                // Top Row: Greeting + Account Selector
+                // Top Row: Greeting + Account Selector + Color Picker
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -172,12 +183,35 @@ fun DashboardHeroSection(
                         )
                     }
 
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Color picker button
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.15f),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable(onClick = onColorPickerClick)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Palette,
+                                    contentDescription = "Change Color",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
                     if (accounts.isNotEmpty()) {
                         AccountSelectorPill(
-                            selectedAccountId = selectedAccountId,
+                            selectedAccountId = displayAccountId,
                             accounts = accounts,
                             onClick = { accountDropdownExpanded = true }
                         )
+                    }
                     }
                 }
 
@@ -201,48 +235,7 @@ fun DashboardHeroSection(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Divider
-                HorizontalDivider(
-                    color = Color.White.copy(alpha = 0.15f),
-                    thickness = 1.dp
-                )
-
                 Spacer(modifier = Modifier.height(20.dp))
-
-                // Summary Stats Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    HeroStatPill(
-                        label = "Income",
-                        value = financialSummary.allTimeIncome,
-                        icon = Icons.Default.TrendingUp,
-                        containerColor = IncomeGreen.copy(alpha = 0.2f),
-                        iconColor = IncomeGreen,
-                        modifier = Modifier.weight(1f)
-                    )
-                    HeroStatPill(
-                        label = "Expense",
-                        value = financialSummary.allTimeExpense,
-                        icon = Icons.Default.TrendingDown,
-                        containerColor = ExpenseRed.copy(alpha = 0.2f),
-                        iconColor = ExpenseRed,
-                        modifier = Modifier.weight(1f)
-                    )
-                    HeroStatPill(
-                        label = "Savings",
-                        value = financialSummary.monthlyNetSavings,
-                        icon = Icons.Default.Savings,
-                        containerColor = AmberHighlight.copy(alpha = 0.2f),
-                        iconColor = AmberHighlight,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
 
                 // Quick Actions Row
                 Row(
@@ -304,7 +297,7 @@ fun DashboardHeroSection(
                     }
                 },
                 onClick = {
-                    selectedAccountId = null
+                    onAccountSelected(-1L)
                     accountDropdownExpanded = false
                 }
             )
@@ -325,7 +318,7 @@ fun DashboardHeroSection(
                         }
                     },
                     onClick = {
-                        selectedAccountId = account.id
+                        onAccountSelected(account.id)
                         accountDropdownExpanded = false
                     }
                 )
@@ -387,50 +380,6 @@ private fun AccountSelectorPill(
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.6f),
                 modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun HeroStatPill(
-    label: String,
-    value: Double,
-    icon: ImageVector,
-    containerColor: Color,
-    iconColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = containerColor,
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            AnimatedDoubleCounter(
-                targetValue = value,
-                prefix = "\u09F3",
-                color = Color.White,
-                fontSize = 13.sp,
-                durationMillis = 800
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.7f),
-                fontWeight = FontWeight.Medium
             )
         }
     }
