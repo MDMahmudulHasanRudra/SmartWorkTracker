@@ -1,29 +1,71 @@
 package com.rudra.smartworktracker.ui.screens.dashboard
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.*
-import androidx.compose.foundation.clickable
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.data.entity.Account
@@ -37,6 +79,11 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+private val IncomeGreen = Color(0xFF10B981)
+private val ExpenseRed = Color(0xFFEF4444)
+private val AmberHighlight = Color(0xFFF59E0B)
+private val IndigoAccent = Color(0xFF6366F1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,185 +106,181 @@ fun DashboardHeroSection(
         }
     }
     val dateStr = remember(today) {
-        today.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
+        today.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
     }
 
     var selectedAccountId by remember { mutableStateOf<Long?>(null) }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
-    var heroExpanded by remember { mutableStateOf(true) }
     var showWorkTypeSelector by remember { mutableStateOf(false) }
 
     val netWorth = financialSummary.allTimeIncome - financialSummary.allTimeExpense
     val selectedAccount = accounts.find { it.id == selectedAccountId }
-    val displayLabel = if (selectedAccountId == null) "Net Worth" else "${selectedAccount?.type?.let { it.displayName() } ?: "Balance"}"
+    val displayLabel = if (selectedAccountId == null) "Net Worth" else selectedAccount?.type?.let { it.displayName() } ?: "Balance"
     val displayValue = if (selectedAccountId == null) netWorth else selectedAccount?.balance ?: 0.0
     val isPositive = displayValue >= 0
-
-    val incomeColor = Color(0xFF4CAF50)
-    val expenseColor = MaterialTheme.colorScheme.error
-    val primaryColor = MaterialTheme.colorScheme.primary
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(16.dp, RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            .shadow(12.dp, RoundedCornerShape(28.dp)),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                            MaterialTheme.colorScheme.primary
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                )
         ) {
-            // Top Row: Greeting + Account Selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "$greeting, $displayName",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = dateStr,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Account Selector Button
-                if (accounts.isNotEmpty()) {
-                    AccountSelectorButton(
-                        selectedAccountId = selectedAccountId,
-                        accounts = accounts,
-                        onClick = { accountDropdownExpanded = true }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Main Net Worth Display with Animation
-            AnimatedDoubleCounter(
-                targetValue = displayValue,
-                prefix = "\u09F3",
-                color = if (isPositive) incomeColor else expenseColor,
-                fontSize = 42.sp,
-                durationMillis = 1200
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Label
-            Text(
-                text = displayLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // Expandable Details Section
-            if (heroExpanded) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Divider
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
-
-                    // Summary Stats Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        HeroStatItem(
-                            label = "Income",
-                            value = financialSummary.allTimeIncome,
-                            color = incomeColor,
-                            icon = Icons.Default.TrendingUp,
-                            trend = "+12.5%",
-                            incomeColor = incomeColor,
-                            expenseColor = expenseColor
-                        )
-                        HeroStatItem(
-                            label = "Expense",
-                            value = financialSummary.allTimeExpense,
-                            color = expenseColor,
-                            icon = Icons.Default.TrendingUp,
-                            trend = "+8.2%",
-                            isNegative = true,
-                            incomeColor = incomeColor,
-                            expenseColor = expenseColor
-                        )
-                        HeroStatItem(
-                            label = "Savings",
-                            value = financialSummary.monthlyNetSavings,
-                            color = if (financialSummary.monthlyNetSavings >= 0) incomeColor else expenseColor,
-                            icon = Icons.Default.Savings,
-                            trend = "${financialSummary.savingsPercentage}%",
-                            incomeColor = incomeColor,
-                            expenseColor = expenseColor
-                        )
-                    }
-
-                    // Quick Actions Row - using simple layout
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ActionItem(
-                            icon = Icons.Default.SwapHoriz,
-                            label = "Accounts",
-                            onClick = onNavigateToAccounts
-                        )
-                        ActionItem(
-                            icon = Icons.Default.LocalFireDepartment,
-                            label = "Streak: 1",
-                            onClick = {}
-                        )
-                        ActionItem(
-                            icon = Icons.Default.AccountBalanceWallet,
-                            label = "Today's Work",
-                            onClick = { showWorkTypeSelector = true }
-                        )
-                    }
-
-                    // Today's Work Type Selector
-                    if (showWorkTypeSelector) {
-                        WorkTypeSelector(
-                            currentType = todayWorkType,
-                            onTypeSelected = { type ->
-                                onWorkTypeClick(type)
-                                showWorkTypeSelector = false
-                            },
-                            onDismiss = { showWorkTypeSelector = false }
-                        )
-                    }
-                }
-            }
-
-            // Expand/Collapse Toggle
-            IconButton(
-                onClick = { heroExpanded = !heroExpanded },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .wrapContentWidth(Alignment.CenterHorizontally)
+                    .padding(24.dp)
             ) {
-                Icon(
-                    imageVector = if (heroExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowDropDown,
-                    contentDescription = if (heroExpanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                // Top Row: Greeting + Account Selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "$greeting,",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = displayName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = dateStr,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    if (accounts.isNotEmpty()) {
+                        AccountSelectorPill(
+                            selectedAccountId = selectedAccountId,
+                            accounts = accounts,
+                            onClick = { accountDropdownExpanded = true }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Net Worth Display
+                Column {
+                    Text(
+                        text = displayLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AnimatedDoubleCounter(
+                        targetValue = displayValue,
+                        prefix = "\u09F3",
+                        color = Color.White,
+                        fontSize = 40.sp,
+                        durationMillis = 1000
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Divider
+                HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.15f),
+                    thickness = 1.dp
                 )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Summary Stats Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    HeroStatPill(
+                        label = "Income",
+                        value = financialSummary.allTimeIncome,
+                        icon = Icons.Default.TrendingUp,
+                        containerColor = IncomeGreen.copy(alpha = 0.2f),
+                        iconColor = IncomeGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroStatPill(
+                        label = "Expense",
+                        value = financialSummary.allTimeExpense,
+                        icon = Icons.Default.TrendingDown,
+                        containerColor = ExpenseRed.copy(alpha = 0.2f),
+                        iconColor = ExpenseRed,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroStatPill(
+                        label = "Savings",
+                        value = financialSummary.monthlyNetSavings,
+                        icon = Icons.Default.Savings,
+                        containerColor = AmberHighlight.copy(alpha = 0.2f),
+                        iconColor = AmberHighlight,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Quick Actions Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HeroActionChip(
+                        icon = Icons.Default.SwapHoriz,
+                        label = "Accounts",
+                        onClick = onNavigateToAccounts,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroActionChip(
+                        icon = Icons.Default.LocalFireDepartment,
+                        label = "Streak: 1",
+                        onClick = {},
+                        modifier = Modifier.weight(1f)
+                    )
+                    HeroActionChip(
+                        icon = Icons.Default.AccountBalanceWallet,
+                        label = "Work Type",
+                        onClick = { showWorkTypeSelector = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Work Type Selector
+                if (showWorkTypeSelector) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    WorkTypeSelector(
+                        currentType = todayWorkType,
+                        onTypeSelected = { type ->
+                            onWorkTypeClick(type)
+                            showWorkTypeSelector = false
+                        },
+                        onDismiss = { showWorkTypeSelector = false }
+                    )
+                }
             }
         }
     }
@@ -292,135 +335,152 @@ fun DashboardHeroSection(
 }
 
 @Composable
-private fun AccountSelectorButton(
+private fun AccountSelectorPill(
     selectedAccountId: Long?,
     accounts: List<Account>,
     onClick: () -> Unit
 ) {
     val selectedAccount = accounts.find { it.id == selectedAccountId }
-    val displayText = selectedAccount?.name ?: "All Accounts"
+    val displayText = selectedAccount?.name ?: "All"
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+        label = "pillScale"
+    )
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.15f),
         modifier = Modifier
-            .fillMaxWidth(0.4f)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.AccountBalanceWallet,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = displayText,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-            }
+            Icon(
+                Icons.Default.AccountBalanceWallet,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = displayText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(80.dp)
+            )
             Icon(
                 Icons.Default.ArrowDropDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(16.dp)
             )
         }
     }
 }
 
 @Composable
-private fun HeroStatItem(
+private fun HeroStatPill(
     label: String,
     value: Double,
-    color: Color,
     icon: ImageVector,
-    trend: String,
-    isNegative: Boolean = false,
-    incomeColor: Color,
-    expenseColor: Color
+    containerColor: Color,
+    iconColor: Color,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        modifier = modifier
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            AnimatedDoubleCounter(
+                targetValue = value,
+                prefix = "\u09F3",
+                color = Color.White,
+                fontSize = 13.sp,
+                durationMillis = 800
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.White.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Medium
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        AnimatedDoubleCounter(
-            targetValue = value,
-            prefix = "\u09F3",
-            color = color,
-            fontSize = 16.sp,
-            durationMillis = 800
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = trend,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isNegative) expenseColor else incomeColor,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 
 @Composable
-private fun ActionItem(
+private fun HeroActionChip(
     icon: ImageVector,
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+        label = "chipScale"
+    )
+
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-        tonalElevation = 0.dp
+        color = Color.White.copy(alpha = if (isPressed) 0.25f else 0.12f),
+        modifier = modifier
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
             )
         }
     }
@@ -433,25 +493,29 @@ private fun WorkTypeSelector(
     onDismiss: () -> Unit
 ) {
     val workTypeOptions = listOf(
-        WorkTypeOption(WorkType.OFFICE, Icons.Default.Work, "Office", Color(0xFF2196F3)),
-        WorkTypeOption(WorkType.HOME_OFFICE, Icons.Default.Home, "Home Office", Color(0xFFFF9800)),
-        WorkTypeOption(WorkType.OFF_DAY, Icons.Default.BeachAccess, "Off Day", Color(0xFF9C27B0)),
-        WorkTypeOption(WorkType.OVERTIME, Icons.Default.Bolt, "Overtime", Color(0xFFE91E63))
+        WorkTypeOption(WorkType.OFFICE, Icons.Default.Work, "Office", IndigoAccent),
+        WorkTypeOption(WorkType.HOME_OFFICE, Icons.Default.Home, "Home", AmberHighlight),
+        WorkTypeOption(WorkType.OFF_DAY, Icons.Default.BeachAccess, "Off Day", Color(0xFF8B5CF6)),
+        WorkTypeOption(WorkType.OVERTIME, Icons.Default.Bolt, "Overtime", ExpenseRed)
     )
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Select Today's Work Type", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = "Dismiss")
+            Text(
+                "Today's Work Type",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
             }
         }
         Row(
@@ -460,25 +524,46 @@ private fun WorkTypeSelector(
         ) {
             workTypeOptions.forEach { option ->
                 val isSelected = currentType == option.workType
+                val interactionSource = remember { MutableInteractionSource() }
+                val isPressed by interactionSource.collectIsPressedAsState()
+                val scale by animateFloatAsState(
+                    targetValue = if (isPressed) 0.93f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+                    label = "workTypeScale"
+                )
+
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clickable { onTypeSelected(option.workType) },
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) option.color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                    border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, option.color) else androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent),
-                    tonalElevation = 0.dp
+                    color = if (isSelected) option.color.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.1f),
+                    border = if (isSelected) BorderStroke(1.5.dp, option.color.copy(alpha = 0.6f)) else null,
+                    modifier = Modifier
+                        .weight(1f)
+                        .scale(scale)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onTypeSelected(option.workType) }
+                        )
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(option.icon, contentDescription = null, tint = if (isSelected) option.color else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                        Text(text = option.label, style = MaterialTheme.typography.labelSmall, color = if (isSelected) option.color else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            option.icon,
+                            contentDescription = null,
+                            tint = if (isSelected) option.color else Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = option.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) option.color else Color.White.copy(alpha = 0.7f)
+                        )
                     }
                 }
             }
@@ -486,7 +571,7 @@ private fun WorkTypeSelector(
     }
 }
 
-data class WorkTypeOption(
+private data class WorkTypeOption(
     val workType: WorkType,
     val icon: ImageVector,
     val label: String,
