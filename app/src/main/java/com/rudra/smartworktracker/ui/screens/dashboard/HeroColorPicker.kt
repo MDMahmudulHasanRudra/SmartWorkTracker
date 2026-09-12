@@ -148,7 +148,7 @@ fun HeroColorPickerSheet(
                         .background(
                             if (currentColor == 0) Brush.linearGradient(
                                 listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
-                            ) else Brush.solidGradient(listOf(Color(currentColor), Color(currentColor)))
+                            ) else Brush.linearGradient(listOf(Color(currentColor), Color(currentColor)))
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -264,7 +264,7 @@ private fun ColorSwatch(
                 .background(
                     if (color == Color.White) Brush.linearGradient(
                         listOf(Color(0xFFF1F5F9), Color(0xFFE2E8F0))
-                    ) else Brush.solidGradient(listOf(color, color))
+                    ) else Brush.linearGradient(listOf(color, color))
                 ),
             contentAlignment = Alignment.Center
         ) {

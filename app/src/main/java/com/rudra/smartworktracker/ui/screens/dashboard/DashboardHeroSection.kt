@@ -122,10 +122,7 @@ fun DashboardHeroSection(
     val heroBrush = remember(heroColor) {
         if (heroColor == 0) {
             Brush.linearGradient(
-                colors = listOf(
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                    MaterialTheme.colorScheme.primary
-                ),
+                colors = listOf(Color(0xFF6366F1).copy(alpha = 0.9f), Color(0xFF6366F1)),
                 start = Offset(0f, 0f),
                 end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
             )
@@ -445,7 +442,7 @@ private fun WorkTypeSelector(
         WorkTypeOption(WorkType.OFFICE, Icons.Default.Work, "Office", IndigoAccent),
         WorkTypeOption(WorkType.HOME_OFFICE, Icons.Default.Home, "Home", AmberHighlight),
         WorkTypeOption(WorkType.OFF_DAY, Icons.Default.BeachAccess, "Off Day", Color(0xFF8B5CF6)),
-        WorkTypeOption(WorkType.OVERTIME, Icons.Default.Bolt, "Overtime", ExpenseRed)
+        WorkTypeOption(WorkType.OVERTIME, Icons.Default.Bolt, "Overtime", Color(0xFFEF4444))
     )
 
     Column(
