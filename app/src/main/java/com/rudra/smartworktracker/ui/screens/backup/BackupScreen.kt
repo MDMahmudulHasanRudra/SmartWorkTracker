@@ -1,9 +1,7 @@
 package com.rudra.smartworktracker.ui.screens.backup
 
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,7 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,87 +31,82 @@ import java.util.*
 fun BackupScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val viewModel: BackupViewModel = viewModel(factory = BackupViewModelFactory(context))
-    val isLoading by viewModel.isLoading.collectAsState()
-    val lastBackupTime by viewModel.lastBackupTime.collectAsState()
-    val nextBackupTime by viewModel.nextBackupTime.collectAsState()
-    val isAutoBackupEnabled by viewModel.isAutoBackupEnabled.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val lastBackupTime by viewModel.lastBackupTime.collectAsStateWithLifecycle()
+    val lastAutoBackupTime by viewModel.lastAutoBackupTime.collectAsStateWithLifecycle()
+    val nextBackupTime by viewModel.nextBackupTime.collectAsStateWithLifecycle()
+    val isAutoBackupEnabled by viewModel.isAutoBackupEnabled.collectAsStateWithLifecycle()
+    val pendingRestore by viewModel.pendingRestore.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()) }
 
-    var showRestoreConfirmDialog by remember { mutableStateOf<android.net.Uri?>(null) }
-    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy - hh:mm a", Locale.getDefault()) }
-
-    val restoreLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri -> uri?.let { showRestoreConfirmDialog = it } }
-    )
-
-    val backupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json"),
-        onResult = { uri -> uri?.let { viewModel.createBackup(it) } }
-    )
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::inspectBackup)
+    }
+    val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(viewModel::createBackup)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.backupResult.collect { result ->
-            when (result) {
-                is BackupResult.Success -> Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                is BackupResult.Error -> Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-            }
+            snackbarHostState.showSnackbar(
+                when (result) {
+                    is BackupResult.Success -> result.message
+                    is BackupResult.Error -> result.message
+                }
+            )
         }
     }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Backup & Security", fontWeight = FontWeight.ExtraBold) },
+            TopAppBar(
+                title = { Text("Backup & Restore", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- System Status Header ---
+            if (isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+
             StatusHeader(
                 lastBackup = if (lastBackupTime > 0) dateFormat.format(Date(lastBackupTime)) else "Never",
-                nextBackup = if (isAutoBackupEnabled && nextBackupTime > 0) dateFormat.format(Date(nextBackupTime)) else "Disabled",
-                isAutoEnabled = isAutoBackupEnabled
+                nextBackup = when {
+                    !isAutoBackupEnabled -> "Off"
+                    nextBackupTime > 0 -> dateFormat.format(Date(nextBackupTime))
+                    else -> "Scheduled"
+                },
+                isAutoEnabled = isAutoBackupEnabled,
+                stale = lastBackupTime == 0L || System.currentTimeMillis() - lastBackupTime > STALE_AFTER_MS
             )
 
-            // --- Auto Backup Toggle ---
             AutoBackupToggleCard(
                 isEnabled = isAutoBackupEnabled,
-                onToggle = { viewModel.toggleAutoBackup(it) }
+                lastAuto = if (lastAutoBackupTime > 0) dateFormat.format(Date(lastAutoBackupTime)) else null,
+                onToggle = viewModel::toggleAutoBackup
             )
 
-            // --- Primary Actions ---
-            Text(
-                "Manual Actions",
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionLabel("Back up")
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ActionTile(
                     modifier = Modifier.weight(1f),
-                    title = "Export",
-                    icon = Icons.Default.FileUpload,
+                    title = "Save file",
+                    icon = Icons.Default.Save,
                     color = MaterialTheme.colorScheme.primary,
-                    description = "Create manual JSON",
+                    description = "Choose where to save",
+                    enabled = !isLoading,
                     onClick = {
                         val ts = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
                         backupLauncher.launch("smart_work_backup_$ts.json")
@@ -121,126 +114,147 @@ fun BackupScreen(onNavigateBack: () -> Unit) {
                 )
                 ActionTile(
                     modifier = Modifier.weight(1f),
-                    title = "Import",
-                    icon = Icons.Default.FileDownload,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    description = "Restore from file",
-                    onClick = { restoreLauncher.launch(arrayOf("application/json")) }
+                    title = "To Downloads",
+                    icon = Icons.Default.Download,
+                    color = MaterialTheme.colorScheme.secondary,
+                    description = "Quick backup now",
+                    enabled = !isLoading,
+                    onClick = viewModel::backupNowToDownloads
                 )
             }
 
-            // --- Detailed Info Section ---
-            Text(
-                "System Intelligence",
+            SectionLabel("Restore")
+            ActionTile(
                 modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                title = "Restore from a backup file",
+                icon = Icons.Default.Restore,
+                color = MaterialTheme.colorScheme.tertiary,
+                description = "You'll see what's inside before anything changes",
+                enabled = !isLoading,
+                onClick = { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }
             )
 
             DetailedInfoCard(
-                title = "Auto-Backup Intelligence",
-                info = "Scheduled for 12:05 AM daily",
-                icon = Icons.Default.Update,
-                detail = "When enabled, the system automatically creates a survival snapshot in your Downloads folder. This process is 100% safe, non-destructive, and never affects your app's performance or core database version."
+                title = "How backups work",
+                icon = Icons.Default.Info,
+                detail = "Backups are plain JSON files containing all of your records and settings. " +
+                    "Daily backups are written to your Downloads folder around 12:05 AM. " +
+                    "Restoring merges the file into your current data: records with the same ID are " +
+                    "replaced, everything else is kept."
             )
 
             DetailedInfoCard(
-                title = "Data Integrity Shield",
-                info = "Offline-First Standard",
-                icon = Icons.Default.Security,
-                detail = "Your data remains under your total control. Manual backups allow you to move your history between devices safely without touching the app's internal structural integrity."
+                title = "Moving to a new phone",
+                icon = Icons.Default.PhoneAndroid,
+                detail = "Save a backup file to cloud storage or send it to yourself, install the app on " +
+                    "the new phone, then use Restore."
             )
 
-            // --- Refresh System ---
-            OutlinedButton(
-                onClick = { 
-                    viewModel.loadBackupStatus()
-                    Toast.makeText(context, "System Status Refreshed", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Refresh Backup Engine Status")
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 
-    if (showRestoreConfirmDialog != null) {
+    pendingRestore?.let { pending ->
+        val summary = pending.summary
         AlertDialog(
-            onDismissRequest = { showRestoreConfirmDialog = null },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Confirm Restore Operation") },
-            text = { 
-                Text("Restoring will merge the backup data with your current records. Any existing data with matching IDs will be safely updated. This process is purely data-level and will NOT change your database version or app structure.\n\nProceed with the restore?") 
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showRestoreConfirmDialog?.let { viewModel.restoreBackup(it) }
-                        showRestoreConfirmDialog = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+            onDismissRequest = viewModel::cancelRestore,
+            icon = { Icon(Icons.Default.Restore, contentDescription = null) },
+            title = { Text("Restore this backup?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Created ${dateFormat.format(Date(summary.timestamp))} (app ${summary.appVersion})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (summary.counts.isEmpty()) {
+                        Text("The backup contains settings only.", style = MaterialTheme.typography.bodySmall)
                     } else {
-                        Text("Restore Data")
+                        summary.counts.forEach { (label, count) ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(label, style = MaterialTheme.typography.bodySmall)
+                                Text("$count", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
+                    Text(
+                        "Matching records are replaced; your other data is kept.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showRestoreConfirmDialog = null }) {
-                    Text("Cancel")
-                }
-            }
+            confirmButton = { Button(onClick = viewModel::confirmRestore) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelRestore) { Text("Cancel") } }
         )
     }
 }
 
+private const val STALE_AFTER_MS = 7L * 24 * 60 * 60 * 1000
+
 @Composable
-fun StatusHeader(lastBackup: String, nextBackup: String, isAutoEnabled: Boolean) {
-    val statusColor = if (isAutoEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val onStatusColor = if (isAutoEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
+fun StatusHeader(lastBackup: String, nextBackup: String, isAutoEnabled: Boolean, stale: Boolean) {
+    val container = when {
+        stale -> MaterialTheme.colorScheme.errorContainer
+        isAutoEnabled -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val onContainer = when {
+        stale -> MaterialTheme.colorScheme.onErrorContainer
+        isAutoEnabled -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = statusColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        colors = CardDefaults.cardColors(containerColor = container)
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(onStatusColor.copy(alpha = 0.1f), CircleShape),
+                    .size(56.dp)
+                    .background(onContainer.copy(alpha = 0.1f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    if (isAutoEnabled) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                    when {
+                        stale -> Icons.Default.Warning
+                        isAutoEnabled -> Icons.Default.CloudDone
+                        else -> Icons.Default.CloudOff
+                    },
                     contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = onStatusColor
+                    modifier = Modifier.size(28.dp),
+                    tint = onContainer
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                if (isAutoEnabled) "Automatic Protection ON" else "Manual Protection Mode",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = onStatusColor
+                when {
+                    stale && lastBackup == "Never" -> "No backup yet"
+                    stale -> "Last backup is over a week old"
+                    isAutoEnabled -> "Daily backups are on"
+                    else -> "Backups are manual"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = onContainer,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                InfoColumn("Last Backup", lastBackup, Alignment.Start, onStatusColor)
-                InfoColumn("Next Schedule", nextBackup, Alignment.End, onStatusColor)
+                InfoColumn("Last backup", lastBackup, Alignment.Start, onContainer)
+                InfoColumn("Next automatic", nextBackup, Alignment.End, onContainer)
             }
         }
     }
@@ -255,36 +269,29 @@ fun InfoColumn(label: String, value: String, alignment: Alignment.Horizontal, co
 }
 
 @Composable
-fun AutoBackupToggleCard(isEnabled: Boolean, onToggle: (Boolean) -> Unit) {
+fun AutoBackupToggleCard(isEnabled: Boolean, lastAuto: String?, onToggle: (Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
         Row(
             modifier = Modifier
-                .padding(20.dp)
+                .padding(16.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("Daily Auto-Backup", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text("Daily auto-backup", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "Automatically backup data every day at 12:05 AM.",
+                    lastAuto?.let { "Last automatic backup: $it" } ?: "Saves a copy to Downloads every night",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
+            Switch(checked = isEnabled, onCheckedChange = onToggle)
         }
     }
 }
@@ -296,51 +303,43 @@ fun ActionTile(
     icon: ImageVector,
     color: Color,
     description: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(140.dp),
+        enabled = enabled,
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         color = color.copy(alpha = 0.1f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.2f))
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.25f))
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(title, fontWeight = FontWeight.Bold, color = color)
-            Text(description, style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, color = color)
+                Text(description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
 @Composable
-fun DetailedInfoCard(title: String, info: String, icon: ImageVector, detail: String) {
+fun DetailedInfoCard(title: String, icon: ImageVector, detail: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                    Text(info, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                detail,
-                style = MaterialTheme.typography.bodySmall,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

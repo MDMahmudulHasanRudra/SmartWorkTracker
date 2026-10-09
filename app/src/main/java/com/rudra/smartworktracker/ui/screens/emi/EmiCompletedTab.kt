@@ -101,7 +101,7 @@ fun AddEmiBottomSheet(
                                     Column {
                                         Text(loan.personName)
                                         Text(
-                                            "Remaining: ${loan.remainingAmount}",
+                                            "Remaining: ${CurrencyManager.format(loan.remainingAmount)}",
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     }

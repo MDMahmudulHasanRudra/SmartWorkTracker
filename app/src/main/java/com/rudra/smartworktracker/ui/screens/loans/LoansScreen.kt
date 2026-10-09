@@ -44,7 +44,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -122,10 +122,11 @@ fun LoansScreen(
                 onQueryChange = { viewModel.setSearchQuery(it) }
             )
 
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = LoanTab.entries.indexOf(uiState.selectedTab),
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+                contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 12.dp
             ) {
                 LoanTab.entries.forEach { tab ->
                     Tab(
@@ -135,10 +136,11 @@ fun LoansScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(tab.title)
                                 val count = when (tab) {
-                                    LoanTab.ALL -> uiState.loans.size
+                                    LoanTab.ALL -> uiState.statistics.totalCount
                                     LoanTab.BORROWED -> uiState.statistics.borrowedCount
                                     LoanTab.LENT -> uiState.statistics.lentCount
                                     LoanTab.OVERDUE -> uiState.statistics.overdueCount
+                                    LoanTab.SETTLED -> uiState.loans.count { !it.isActive || it.isFullyPaid }
                                 }
                                 if (count > 0) {
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -189,13 +191,15 @@ fun LoansScreen(
             )
         }
 
-        if (uiState.showEditLoanDialog != null) {
+        uiState.showEditLoanDialog?.let { editingLoan ->
             AddEditLoanBottomSheet(
-                loan = uiState.showEditLoanDialog,
+                loan = editingLoan,
                 onDismiss = { viewModel.closeEditLoanDialog() },
                 onSave = { personName, contact, amount, type, category, dueDate, interest, emi, totalEmis, notes, source, dest ->
                     viewModel.updateLoan(
-                        uiState.showEditLoanDialog!!.copy(
+                        original = editingLoan,
+                        newAmount = amount,
+                        edited = editingLoan.copy(
                             personName = personName,
                             contactNumber = contact,
                             loanType = type,

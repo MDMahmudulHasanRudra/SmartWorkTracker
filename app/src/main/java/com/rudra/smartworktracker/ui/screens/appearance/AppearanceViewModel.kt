@@ -5,11 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.repository.SettingsRepository
+import com.rudra.smartworktracker.data.repository.ThemeMode
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class AppearanceUiState(
-    val isDarkTheme: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val fontSize: Float = 1.0f,
     val accentColorIndex: Int = 0,
     val isDynamicColor: Boolean = true
@@ -25,13 +26,13 @@ class AppearanceViewModel(
     init {
         viewModelScope.launch {
             combine(
-                settingsRepository.darkTheme,
+                settingsRepository.themeMode,
                 settingsRepository.fontSize,
                 settingsRepository.accentColor,
                 settingsRepository.dynamicColor
-            ) { dark, size, color, dynamic ->
+            ) { mode, size, color, dynamic ->
                 AppearanceUiState(
-                    isDarkTheme = dark,
+                    themeMode = mode,
                     fontSize = size.toFloat(),
                     accentColorIndex = color,
                     isDynamicColor = dynamic
@@ -40,8 +41,8 @@ class AppearanceViewModel(
         }
     }
 
-    fun setDarkTheme(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setDarkTheme(enabled) }
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     }
 
     fun setFontSize(size: Float) {

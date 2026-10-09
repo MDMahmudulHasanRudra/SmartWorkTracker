@@ -69,21 +69,22 @@ class SavingsViewModel(
                 savingsRepository.getSavingsHistory(),
                 accountRepository.getAllAccounts()
             ) { savings, history, accounts ->
-                val filtered = filterAndSortHistory(history, TimeRange.ALL, SortOrder.DESCENDING)
-                val stats = calculateStats(history)
+                val current = _uiState.value
                 val accountSavings = mutableMapOf<Long, Double>()
                 accounts.forEach { account ->
                     val total = history.filter { it.accountId == account.id }.sumOf { it.amount }
                     if (total != 0.0) accountSavings[account.id] = total
                 }
-                EnhancedSavingsUiState(
-                    savings = savings ?: 0.0,
+                // Keep the user's filters/sort/search when the data changes
+                current.copy(
+                    savings = savings,
                     savingsHistory = history,
-                    filteredHistory = filtered,
+                    filteredHistory = filterAndSortHistory(
+                        history, current.selectedTimeRange, current.sortOrder,
+                        current.searchQuery, current.selectedAccountId
+                    ),
                     isLoading = false,
-                    stats = stats,
-                    selectedTimeRange = TimeRange.ALL,
-                    sortOrder = SortOrder.DESCENDING,
+                    stats = calculateStats(history),
                     accounts = accounts,
                     accountSavings = accountSavings
                 )
@@ -120,9 +121,10 @@ class SavingsViewModel(
     private fun filterAndSortHistory(
         history: List<Savings>,
         timeRange: TimeRange,
-        sortOrder: SortOrder
+        sortOrder: SortOrder,
+        searchQuery: String = _uiState.value.searchQuery,
+        selectedAccountId: Long? = _uiState.value.selectedAccountId
     ): List<Savings> {
-        val selectedAccountId = _uiState.value.selectedAccountId
         val filtered = history.filter { savings ->
             val matchesAccount = selectedAccountId == null || savings.accountId == selectedAccountId
             val matchesTime = when (timeRange) {
@@ -165,8 +167,9 @@ class SavingsViewModel(
             }
             matchesAccount && matchesTime
         }.filter { savings ->
-            _uiState.value.searchQuery.isEmpty() ||
-                    savings.note?.contains(_uiState.value.searchQuery, ignoreCase = true) == true
+            searchQuery.isBlank() ||
+                savings.note.contains(searchQuery, ignoreCase = true) ||
+                savings.category.contains(searchQuery, ignoreCase = true)
         }
 
         return when (sortOrder) {
@@ -184,16 +187,19 @@ class SavingsViewModel(
     }
 
     fun selectAccount(accountId: Long?) {
-        _uiState.value = _uiState.value.copy(selectedAccountId = accountId)
-        val filtered = filterAndSortHistory(_uiState.value.savingsHistory, _uiState.value.selectedTimeRange, _uiState.value.sortOrder)
-        _uiState.value = _uiState.value.copy(filteredHistory = filtered)
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            selectedAccountId = accountId,
+            filteredHistory = filterAndSortHistory(state.savingsHistory, state.selectedTimeRange, state.sortOrder, selectedAccountId = accountId)
+        )
     }
 
     fun searchTransactions(query: String) {
-        val filtered = filterAndSortHistory(_uiState.value.savingsHistory, _uiState.value.selectedTimeRange, _uiState.value.sortOrder)
-        _uiState.value = _uiState.value.copy(
+        val state = _uiState.value
+        // Filter with the new query (previously used the stale one, lagging a keystroke)
+        _uiState.value = state.copy(
             searchQuery = query,
-            filteredHistory = filtered
+            filteredHistory = filterAndSortHistory(state.savingsHistory, state.selectedTimeRange, state.sortOrder, searchQuery = query)
         )
     }
 
@@ -217,7 +223,7 @@ class SavingsViewModel(
                 savingsRepository.addToSavings(amount, note, accountId = accountId)
                 // Update account balance if linked
                 if (accountId != null) {
-                    accountRepository.addIncomeToAccount(accountId, amount)
+                    accountRepository.adjustBalance(accountId, amount)
                 }
                 _uiState.value = _uiState.value.copy(successMessage = "Successfully added ${CurrencyManager.format(amount)}")
                 clearMessages()
@@ -243,7 +249,7 @@ class SavingsViewModel(
                 savingsRepository.withdrawFromSavings(amount, note, accountId = accountId)
                 // Deduct from account balance if linked
                 if (accountId != null) {
-                    accountRepository.deductExpenseFromAccount(accountId, amount)
+                    accountRepository.adjustBalance(accountId, -amount)
                 }
                 _uiState.value = _uiState.value.copy(successMessage = "Successfully withdrew ${CurrencyManager.format(amount)}")
                 clearMessages()
@@ -257,13 +263,8 @@ class SavingsViewModel(
         viewModelScope.launch {
             try {
                 // Reverse balance impact if linked to account
-                if (savings.accountId != null) {
-                    if (savings.amount > 0) {
-                        accountRepository.deductExpenseFromAccount(savings.accountId, savings.amount)
-                    } else {
-                        accountRepository.addIncomeToAccount(savings.accountId, kotlin.math.abs(savings.amount))
-                    }
-                }
+                // Deposits are stored positive and withdrawals negative, so undoing is -amount
+                savings.accountId?.let { accountRepository.adjustBalance(it, -savings.amount) }
                 savingsRepository.deleteTransaction(savings)
                 _uiState.value = _uiState.value.copy(successMessage = "Transaction deleted")
                 clearMessages()

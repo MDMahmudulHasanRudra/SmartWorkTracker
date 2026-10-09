@@ -1,29 +1,38 @@
 package com.rudra.smartworktracker.ui.screens.focus
 
 import android.app.Application
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.R
 import com.rudra.smartworktracker.data.AppDatabase
+import com.rudra.smartworktracker.data.repository.AchievementRepository
+import com.rudra.smartworktracker.engine.AchievementManager
 import com.rudra.smartworktracker.model.FocusSession
 import com.rudra.smartworktracker.model.FocusType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
-
-
-
 
 class FocusViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val focusSessionDao = AppDatabase.getDatabase(application).focusSessionDao()
+    private val db = AppDatabase.getDatabase(application)
+    private val focusSessionDao = db.focusSessionDao()
+    private val achievementRepository = AchievementRepository(db.achievementDao())
+    private val achievementManager = AchievementManager(db.achievementDao(), db.habitDao(), focusSessionDao)
     private var timerJob: Job? = null
     private var interruptionsCount = 0
     private var startTime = 0L
@@ -34,36 +43,46 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPaused = MutableStateFlow(false)
     val isPaused = _isPaused.asStateFlow()
 
+    private val notificationManager: NotificationManager
+        get() = getApplication<Application>().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    init {
+        // Notifications posted to a channel that doesn't exist are silently dropped on Android 8+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Focus sessions", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Progress and completion of focus sessions"
+                }
+            )
+        }
+    }
+
     fun startFocusSession(type: FocusType, duration: Long) {
+        timerJob?.cancel()
         startTime = System.currentTimeMillis()
         interruptionsCount = 0
         _timerState.value = TimerState.Running(type, duration, 0)
         _isPaused.value = false
 
         startTimer(duration)
-        sendStartNotification(type, duration)
+        showOngoing(type, "${type.displayName} • ${duration / 60} minutes")
     }
 
     fun pauseResumeTimer() {
+        val currentState = _timerState.value as? TimerState.Running ?: return
         _isPaused.value = !_isPaused.value
         if (_isPaused.value) {
             timerJob?.cancel()
-            sendPauseNotification()
+            showOngoing(currentState.type, "Paused • ${formatRemaining(currentState.duration - currentState.elapsed)} left")
         } else {
-            val currentState = _timerState.value
-            if (currentState is TimerState.Running) {
-                startTimer(currentState.duration, currentState.elapsed)
-                sendResumeNotification()
-            }
+            startTimer(currentState.duration, currentState.elapsed)
+            showOngoing(currentState.type, "Resumed • ${formatRemaining(currentState.duration - currentState.elapsed)} left")
         }
     }
 
+    /** Interruptions lower the session's focus score (they no longer move the timer). */
     fun recordInterruption() {
-        interruptionsCount++
-        val currentState = _timerState.value
-        if (currentState is TimerState.Running) {
-            _timerState.value = currentState.copy(elapsed = currentState.elapsed + 30) // Add 30 seconds penalty
-        }
+        if (_timerState.value is TimerState.Running) interruptionsCount++
     }
 
     fun stopFocusSession() {
@@ -74,10 +93,11 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
         }
         _timerState.value = TimerState.Idle
         _isPaused.value = false
-        cancelNotification()
+        cancelOngoing()
     }
 
     private fun startTimer(totalDuration: Long, initialElapsed: Long = 0) {
+        timerJob?.cancel()
         timerJob = viewModelScope.launch {
             var elapsed = initialElapsed
             while (elapsed < totalDuration && !_isPaused.value) {
@@ -87,14 +107,12 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
                 if (currentState is TimerState.Running) {
                     _timerState.value = currentState.copy(elapsed = elapsed)
 
-                    // Send periodic updates
                     if (elapsed % 300 == 0L) { // Every 5 minutes
-                        sendProgressNotification(currentState.type, elapsed, totalDuration)
+                        showOngoing(currentState.type, "${formatRemaining(totalDuration - elapsed)} left")
                     }
 
-                    // Check for completion
                     if (elapsed >= totalDuration) {
-                        onTimerComplete(currentState)
+                        onTimerComplete(currentState.copy(elapsed = elapsed))
                         break
                     }
                 }
@@ -104,31 +122,24 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun onTimerComplete(state: TimerState.Running) {
         viewModelScope.launch {
-            // Calculate focus score based on interruptions and time spent
-            val focusScore = calculateFocusScore(state.duration, interruptionsCount)
-
-            val focusSession = FocusSession(
-                id = UUID.randomUUID().toString(),
-                type = state.type,
-                duration = state.duration,
-                elapsedTime = state.elapsed,
-                interruptions = interruptionsCount,
-                focusScore = focusScore,
-                timestamp = System.currentTimeMillis()
-            )
-
-            focusSessionDao.insertFocusSession(focusSession)
-
+            val focusScore = calculateFocusScore(state.elapsed, interruptionsCount)
+            persist(state, focusScore)
+            cancelOngoing()
             sendCompletionNotification(state.type)
             _timerState.value = TimerState.Completed(state.type, focusScore)
         }
     }
 
     private fun saveSession(state: TimerState.Running) {
+        if (state.elapsed < MIN_SAVED_SECONDS) return // Ignore accidental start/stop taps
         viewModelScope.launch {
-            val focusScore = calculateFocusScore(state.elapsed, interruptionsCount)
+            persist(state, calculateFocusScore(state.elapsed, interruptionsCount))
+        }
+    }
 
-            val focusSession = FocusSession(
+    private suspend fun persist(state: TimerState.Running, focusScore: Int) {
+        focusSessionDao.insertFocusSession(
+            FocusSession(
                 id = UUID.randomUUID().toString(),
                 type = state.type,
                 duration = state.duration,
@@ -137,9 +148,10 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
                 focusScore = focusScore,
                 timestamp = startTime
             )
-
-            focusSessionDao.insertFocusSession(focusSession)
-        }
+        )
+        // Focus achievements used to unlock only when the Achievements screen was opened
+        achievementRepository.initializeAchievements()
+        achievementManager.checkAndUnlockAchievements()
     }
 
     private fun calculateFocusScore(elapsedTime: Long, interruptions: Int): Int {
@@ -148,51 +160,55 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
         return maxOf(0, baseScore - interruptionPenalty)
     }
 
-    private fun sendStartNotification(type: FocusType, duration: Long) {
-        val notificationManager = getApplication<Application>()
-            .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private fun formatRemaining(seconds: Long): String {
+        val safe = seconds.coerceAtLeast(0)
+        return "%d:%02d".format(safe / 60, safe % 60)
+    }
 
-        val notification = NotificationCompat.Builder(getApplication(), "focus_channel")
-            .setContentTitle("Focus Session Started")
-            .setContentText("${type.displayName} - ${duration / 60} minutes")
+    private fun showOngoing(type: FocusType, text: String) {
+        val notification = NotificationCompat.Builder(getApplication(), CHANNEL_ID)
+            .setContentTitle("Focus: ${type.displayName}")
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_alarm)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
             .setOngoing(true)
             .build()
-
-        notificationManager.notify(1, notification)
+        notificationManager.notify(ONGOING_NOTIFICATION_ID, notification)
     }
 
     private fun sendCompletionNotification(type: FocusType) {
-        val notificationManager = getApplication<Application>()
-            .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val notification = NotificationCompat.Builder(getApplication(), "focus_channel")
+        val notification = NotificationCompat.Builder(getApplication(), CHANNEL_ID)
             .setContentTitle("Focus Session Completed!")
             .setContentText("Great job completing your ${type.displayName} session!")
-            .setSmallIcon(R.drawable.onbord)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setSmallIcon(R.drawable.ic_alarm)
+            .setAutoCancel(true)
             .build()
-
-        notificationManager.notify(2, notification)
+        notificationManager.notify(COMPLETED_NOTIFICATION_ID, notification)
     }
 
-    private fun sendPauseNotification() {
-        // Implementation for pause notification
+    private fun cancelOngoing() {
+        notificationManager.cancel(ONGOING_NOTIFICATION_ID)
     }
 
-    private fun sendResumeNotification() {
-        // Implementation for resume notification
+    override fun onCleared() {
+        // Leaving the screen ends the session; keep the time already focused
+        val state = _timerState.value
+        if (state is TimerState.Running && state.elapsed >= MIN_SAVED_SECONDS) {
+            val score = calculateFocusScore(state.elapsed, interruptionsCount)
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                withContext(NonCancellable) { persist(state, score) }
+            }
+        }
+        cancelOngoing()
+        super.onCleared()
     }
 
-    private fun sendProgressNotification(type: FocusType, elapsed: Long, total: Long) {
-        // Implementation for progress notification
-    }
-
-    private fun cancelNotification() {
-        val notificationManager = getApplication<Application>()
-            .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(1)
+    private companion object {
+        const val CHANNEL_ID = "focus_channel"
+        // Distinct from alarm notification ids, which are schedule ids (1, 2, …)
+        const val ONGOING_NOTIFICATION_ID = 41_001
+        const val COMPLETED_NOTIFICATION_ID = 41_002
+        const val MIN_SAVED_SECONDS = 60L
     }
 }
 

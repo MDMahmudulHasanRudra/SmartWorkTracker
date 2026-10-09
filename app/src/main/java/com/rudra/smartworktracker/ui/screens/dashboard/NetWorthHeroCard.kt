@@ -156,7 +156,7 @@ fun NetWorthHeroCard(
 
             AnimatedDoubleCounter(
                 targetValue = displayValue,
-                prefix = "\u09F3",
+                prefix = CurrencyManager.symbol(),
                 color = if (isPositive) incomeColor else expenseColor,
                 fontSize = 32.sp,
                 durationMillis = 1000
@@ -192,8 +192,8 @@ fun NetWorthHeroCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                HeroMiniStat("Meal Cost", "\u09F3${"%.0f".format(financialSummary.totalMealCost)}")
-                HeroMiniStat("Loan", "\u09F3${"%.0f".format(financialSummary.totalLoan)}")
+                HeroMiniStat("Meal Cost", "${CurrencyManager.formatWhole(financialSummary.totalMealCost)}")
+                HeroMiniStat("Loan", "${CurrencyManager.formatWhole(financialSummary.totalLoan)}")
                 HeroMiniStat("Overtime", "${"%.1f".format(financialSummary.overtimeHours)}h")
             }
         }
@@ -222,7 +222,7 @@ private fun NetWorthSide(label: String, value: Double, color: Color, icon: Image
         Spacer(modifier = Modifier.height(2.dp))
         AnimatedDoubleCounter(
             targetValue = value,
-            prefix = "\u09F3",
+            prefix = CurrencyManager.symbol(),
             color = color,
             fontSize = 18.sp,
             durationMillis = 800

@@ -54,6 +54,11 @@ import com.rudra.smartworktracker.model.HabitDifficulty
 import com.rudra.smartworktracker.ui.components.EmptyStateCard
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.width
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +69,10 @@ fun HabitScreen(
     val habits by viewModel.habits.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     Scaffold(
         topBar = {
@@ -104,17 +112,37 @@ fun HabitScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            item {
+                val doneToday = habits.count { it.lastCompleted?.isToday() == true }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "$doneToday of ${habits.size} done today",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { if (habits.isEmpty()) 0f else doneToday.toFloat() / habits.size },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             items(items = habits, key = { it.id }) { habit ->
                 HabitItem(
                     habit = habit,
-                    onComplete = {
-                        viewModel.completeHabit(habit)
-                        coroutineScope.launch { snackbarHostState.showSnackbar("'${habit.name}' completed!") }
-                    },
+                    onComplete = { viewModel.completeHabit(habit) },
                     onDelete = { viewModel.heavyDeleteHabit(habit) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
+            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
         }
 
@@ -140,9 +168,7 @@ fun HabitItem(
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onComplete() },
+        modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isCompletedToday) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -155,15 +181,23 @@ fun HabitItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(habit.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text(habit.description, fontSize = 14.sp, color = Color.Gray)
+                Text(habit.description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Default.LocalFireDepartment,
                     contentDescription = "Streak",
-                    tint = if (isCompletedToday || habit.streak > 0) Color(0xFFFFA000) else Color.Gray
+                    tint = if (isCompletedToday || habit.streak > 0) Color(0xFFFFA000) else MaterialTheme.colorScheme.outline
                 )
                 Text(text = "${habit.streak}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(4.dp))
+                // Explicit check button instead of the whole card, so a scroll tap doesn't log a completion
+                FilledIconToggleButton(checked = isCompletedToday, onCheckedChange = { if (!isCompletedToday) onComplete() }) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = if (isCompletedToday) "Done today" else "Mark ${habit.name} done"
+                    )
+                }
                 IconButton(onClick = { showDeleteConfirmation = true }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete Habit", tint = MaterialTheme.colorScheme.error)
                 }
@@ -175,7 +209,7 @@ fun HabitItem(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Delete Habit") },
-            text = { Text("Are you sure you want to delete this habit?") },
+            text = { Text("\"${habit.name}\" and its streak will be deleted.") },
             confirmButton = {
                 Button(onClick = { 
                     onDelete()

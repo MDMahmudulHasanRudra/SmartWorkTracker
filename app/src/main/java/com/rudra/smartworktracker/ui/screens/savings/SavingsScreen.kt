@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -76,6 +79,7 @@ import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.data.entity.Savings
 import com.rudra.smartworktracker.data.entity.displayName
 import com.rudra.smartworktracker.data.entity.icon
+import com.rudra.smartworktracker.ui.components.ConfirmDeleteDialog
 import com.rudra.smartworktracker.ui.components.EmptyStateCard
 import com.rudra.smartworktracker.utils.CurrencyManager
 import java.text.SimpleDateFormat
@@ -89,9 +93,9 @@ fun SavingsScreen() {
     val viewModel: SavingsViewModel = viewModel(factory = SavingsViewModelFactory(context.applicationContext as Application))
     val uiState by viewModel.uiState.collectAsState()
 
-    var showHistory by remember { mutableStateOf(false) }
-    var selectedFilter by remember { mutableStateOf(TimeRange.ALL) }
+    var showHistory by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<Savings?>(null) }
 
     Scaffold(
         topBar = {
@@ -108,16 +112,11 @@ fun SavingsScreen() {
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    Button(
-                        onClick = { showHistory = !showHistory },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
+                    IconButton(onClick = { showHistory = !showHistory }) {
+                        Icon(
+                            if (showHistory) Icons.Default.VisibilityOff else Icons.Default.History,
+                            contentDescription = if (showHistory) "Hide history" else "Show history"
                         )
-                    ) {
-                        Icon(Icons.Default.History, contentDescription = "History")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(if (showHistory) "Hide" else "Show")
                     }
                 }
             )
@@ -160,17 +159,14 @@ fun SavingsScreen() {
                 // Filter chips
                 item {
                     FilterChips(
-                        selectedRange = selectedFilter,
-                        onRangeSelected = {
-                            selectedFilter = it
-                            viewModel.filterByTimeRange(it)
-                        }
+                        selectedRange = uiState.selectedTimeRange,
+                        onRangeSelected = { viewModel.filterByTimeRange(it) }
                     )
                 }
 
-                // Chart
+                // Running balance over the full history (the filter only narrows the list below)
                 item {
-                    SavingsHistoryChart(history = uiState.filteredHistory.ifEmpty { uiState.savingsHistory })
+                    SavingsHistoryChart(history = uiState.savingsHistory)
                 }
 
                 // Add button
@@ -183,8 +179,29 @@ fun SavingsScreen() {
                         )
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text("Add Transaction")
+                    }
+                }
+
+                if (showHistory) {
+                    item {
+                        OutlinedTextField(
+                            value = uiState.searchQuery,
+                            onValueChange = { viewModel.searchTransactions(it) },
+                            placeholder = { Text("Search notes or categories") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (uiState.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.searchTransactions("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        )
                     }
                 }
 
@@ -210,22 +227,26 @@ fun SavingsScreen() {
                             }
                         }
                     }
-                    items(uiState.filteredHistory) { savings ->
+                    items(uiState.filteredHistory, key = { it.id }) { savings ->
                         SavingsHistoryItem(
                             savings = savings,
                             accounts = uiState.accounts,
-                            onDelete = { viewModel.deleteTransaction(savings) }
+                            onDelete = { pendingDelete = it }
                         )
                     }
                 } else if (showHistory) {
                     item {
+                        val filtering = uiState.searchQuery.isNotBlank() ||
+                            uiState.selectedTimeRange != TimeRange.ALL || uiState.selectedAccountId != null
                         EmptyStateCard(
                             icon = Icons.Default.Savings,
-                            title = "No transactions yet",
-                            message = "Add a deposit or withdrawal to start tracking your savings."
+                            title = if (filtering) "No matching transactions" else "No transactions yet",
+                            message = if (filtering) "Try a different period, account or search."
+                            else "Add a deposit or withdrawal to start tracking your savings."
                         )
                     }
                 }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
 
@@ -242,6 +263,20 @@ fun SavingsScreen() {
                     }
                     showAddDialog = false
                 }
+            )
+        }
+
+        pendingDelete?.let { savings ->
+            ConfirmDeleteDialog(
+                title = "Delete transaction?",
+                message = "${CurrencyManager.format(kotlin.math.abs(savings.amount))} " +
+                    (if (savings.amount >= 0) "deposit" else "withdrawal") +
+                    " will be removed and any linked account balance adjusted back.",
+                onConfirm = {
+                    viewModel.deleteTransaction(savings)
+                    pendingDelete = null
+                },
+                onDismiss = { pendingDelete = null }
             )
         }
 
@@ -413,7 +448,12 @@ fun FilterChips(
             FilterChip(
                 selected = selectedRange == range,
                 onClick = { onRangeSelected(range) },
-                label = { Text(range.name.replace("_", " ")) }
+                label = {
+                    Text(
+                        range.name.replace("_", " ").lowercase()
+                            .replaceFirstChar { it.uppercase() }
+                    )
+                }
             )
         }
     }
@@ -458,7 +498,9 @@ fun AnimatedSavingsCard(savings: Double) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = CurrencyManager.format(animatedSavings.toDouble()),
+                text = CurrencyManager.format(
+                    if (animatedSavings == savings.toFloat()) savings else animatedSavings.toDouble()
+                ),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -509,15 +551,24 @@ fun SavingsHistoryChart(history: List<Savings>) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Box(modifier = Modifier.weight(1f)) {
+                val balances = remember(history) {
+                    var running = 0.0
+                    history.sortedBy { it.timestamp }.map { entry ->
+                        running += entry.amount
+                        running
+                    }
+                }
+                val lineColor = MaterialTheme.colorScheme.primary
+                val gridColor = MaterialTheme.colorScheme.outlineVariant
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val maxSavings = history.maxOfOrNull { it.amount } ?: 1.0
-                    val minSavings = history.minOfOrNull { it.amount } ?: 0.0
+                    val maxSavings = balances.maxOrNull() ?: 1.0
+                    val minSavings = minOf(0.0, balances.minOrNull() ?: 0.0)
                     val range = maxSavings - minSavings
 
                     for (i in 0..4) {
                         val y = size.height * (1 - i * 0.25f)
                         drawLine(
-                            color = Color.Gray.copy(alpha = 0.3f),
+                            color = gridColor,
                             start = Offset(0f, y),
                             end = Offset(size.width, y),
                             strokeWidth = 1f
@@ -527,11 +578,11 @@ fun SavingsHistoryChart(history: List<Savings>) {
                     val path = Path()
                     val gradientPath = Path()
 
-                    for (index in history.indices) {
-                        val savings = history[index]
-                        val x = (index.toFloat() / (history.size - 1).coerceAtLeast(1).toFloat()) * size.width
+                    for (index in balances.indices) {
+                        val balance = balances[index]
+                        val x = (index.toFloat() / (balances.size - 1).coerceAtLeast(1).toFloat()) * size.width
                         val y = if (range > 0) {
-                            size.height - ((savings.amount - minSavings) / range * size.height).toFloat()
+                            size.height - ((balance - minSavings) / range * size.height).toFloat()
                         } else {
                             size.height / 2
                         }
@@ -545,7 +596,7 @@ fun SavingsHistoryChart(history: List<Savings>) {
                         }
 
                         drawCircle(
-                            color = Color(0xFF2196F3),
+                            color = lineColor,
                             radius = 4f,
                             center = Offset(x, y)
                         )
@@ -559,7 +610,7 @@ fun SavingsHistoryChart(history: List<Savings>) {
                         path = gradientPath,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF2196F3).copy(alpha = 0.3f),
+                                lineColor.copy(alpha = 0.3f),
                                 Color.Transparent
                             )
                         )
@@ -567,7 +618,7 @@ fun SavingsHistoryChart(history: List<Savings>) {
 
                     drawPath(
                         path = path,
-                        color = Color(0xFF2196F3),
+                        color = lineColor,
                         style = Stroke(width = 3f)
                     )
                 }
@@ -663,14 +714,12 @@ fun SavingsHistoryItem(
                 color = if (savings.amount >= 0) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.error
             )
-            if (onDelete != {}) {
-                IconButton(onClick = { onDelete(savings) }) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
+            IconButton(onClick = { onDelete(savings) }) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

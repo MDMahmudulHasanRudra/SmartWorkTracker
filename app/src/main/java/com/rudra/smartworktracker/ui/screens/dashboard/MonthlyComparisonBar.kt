@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.ui.FinancialSummary
 import com.rudra.smartworktracker.ui.components.SectionHeader
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun MonthlyComparisonBar(financialSummary: FinancialSummary) {
@@ -121,7 +122,7 @@ fun MonthlyComparisonBar(financialSummary: FinancialSummary) {
             ) {
                 Column {
                     Text(
-                        text = "\u09F3${"%.0f".format(income)}",
+                        text = "${CurrencyManager.formatWhole(income)}",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = incomeColor
@@ -134,7 +135,7 @@ fun MonthlyComparisonBar(financialSummary: FinancialSummary) {
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "\u09F3${"%.0f".format(expense)}",
+                        text = "${CurrencyManager.formatWhole(expense)}",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = expenseColor

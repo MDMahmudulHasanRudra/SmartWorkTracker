@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.rudra.smartworktracker.data.dao.*
 import com.rudra.smartworktracker.data.entity.*
 import com.rudra.smartworktracker.data.local.TypeConverters as LocalTypeConverters
@@ -52,12 +54,15 @@ import com.rudra.smartworktracker.model.*
         UserHistory::class,
         Account::class,
         ExecutionHistoryEntity::class,
-        BillSplit::class
+        BillSplit::class,
+        Goal::class,
+        com.rudra.smartworktracker.model.Target::class,
+        UserStatsEntity::class
     ],
     views = [
         MonthlySummary::class
     ],
-    version = 12, // v12: Added accountId to savings for account linkage
+    version = 14, // v14: life-plan goals/targets + gamification stats (Wisdom screen persistence)
     exportSchema = false
 )
 @TypeConverters(LocalTypeConverters::class, Converters::class)
@@ -100,10 +105,29 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun executionHistoryDao(): ExecutionHistoryDao
     abstract fun billSplitDao(): BillSplitDao
+    abstract fun lifePlanDao(): LifePlanDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        /** Adds the nullable account link columns without touching existing rows. */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `incomes` ADD COLUMN `accountId` INTEGER")
+                db.execSQL("ALTER TABLE `expenses` ADD COLUMN `accountId` INTEGER")
+            }
+        }
+
+        /** Creates the life-plan tables; SQL mirrors Room's generated schema so validation passes. */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `life_plan_goals` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `targetDate` INTEGER, `createdAt` INTEGER NOT NULL, `totalTargets` INTEGER NOT NULL, `completedTargets` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `life_plan_targets` (`id` TEXT NOT NULL, `goalId` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `isCompleted` INTEGER NOT NULL, `completedAt` INTEGER, `order` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`goalId`) REFERENCES `life_plan_goals`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_life_plan_targets_goalId` ON `life_plan_targets` (`goalId`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `user_gamification_stats` (`id` INTEGER NOT NULL, `experiencePoints` INTEGER NOT NULL, `level` INTEGER NOT NULL, `streak` INTEGER NOT NULL, `totalGoalsCompleted` INTEGER NOT NULL, `lastActiveDate` TEXT NOT NULL, `streakProtectionAvailable` INTEGER NOT NULL, `xpMultiplier` REAL NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
 
         /**
          * Returns the single instance of AppDatabase.
@@ -112,12 +136,14 @@ abstract class AppDatabase : RoomDatabase() {
          */
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                INSTANCE?.let { return it }
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "smart_work_tracker_v2"
                 )
-                // Fix for deprecation: Specify dropAllTables explicitly
+                .addMigrations(MIGRATION_12_13, MIGRATION_13_14)
+                // Only used when no migration path exists (e.g. very old pre-release schemas)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 INSTANCE = instance

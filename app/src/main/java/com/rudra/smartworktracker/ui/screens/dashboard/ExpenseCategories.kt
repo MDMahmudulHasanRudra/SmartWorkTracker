@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.model.ExpenseCategory
 import com.rudra.smartworktracker.ui.components.SectionHeader
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun ExpenseCategories(expensesByCategory: Map<ExpenseCategory, Double>) {
@@ -98,7 +99,7 @@ private fun CategoryChip(category: ExpenseCategory, amount: Double) {
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "\u09F3${"%.0f".format(amount)}",
+                    text = "${CurrencyManager.formatWhole(amount)}",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = category.color,

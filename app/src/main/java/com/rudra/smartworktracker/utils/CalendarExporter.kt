@@ -26,16 +26,17 @@ object CalendarExporter {
                 appendLine("METHOD:PUBLISH")
                 
                 rules.filter { it.isActive }.forEach { rule ->
-                    val startDate = dateFormat.format(rule.startDate)
+                    // Start the series at the next occurrence so past dates aren't added to calendars
                     val nextExec = dateFormat.format(rule.nextExecutionDate)
-                    
+                    val description = "${rule.description ?: ""} | Amount: ${CurrencyManager.format(rule.amount)} | Type: ${rule.transactionType}"
+
                     appendLine("BEGIN:VEVENT")
-                    appendLine("DTSTART:$startDate")
-                    appendLine("DTEND:$startDate")
+                    appendLine("DTSTART:$nextExec")
+                    appendLine("DTEND:$nextExec")
                     appendLine("DTSTAMP:$now")
                     appendLine("UID:${rule.id}@smartworktracker")
-                    appendLine("SUMMARY:${rule.name}")
-                    appendLine("DESCRIPTION:${rule.description ?: ""} | Amount: $${rule.amount} | Type: ${rule.transactionType}")
+                    appendLine("SUMMARY:${escapeText(rule.name)}")
+                    appendLine("DESCRIPTION:${escapeText(description)}")
                     
                     val rrule = getRRule(rule)
                     if (rrule != null) {
@@ -61,14 +62,22 @@ object CalendarExporter {
         }
     }
     
+    /** RFC 5545 TEXT escaping: backslash, semicolon, comma and newlines. */
+    private fun escapeText(text: String): String = text
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\n", "\\n")
+
     private fun getRRule(rule: RecurringRule): String? {
+        val interval = rule.interval.coerceAtLeast(1)
         return when (rule.frequency) {
-            RecurringFrequency.DAILY -> "FREQ=DAILY;INTERVAL=${rule.interval}"
-            RecurringFrequency.WEEKLY -> "FREQ=WEEKLY;INTERVAL=${rule.interval}"
-            RecurringFrequency.BIWEEKLY -> "FREQ=WEEKLY;INTERVAL=2"
-            RecurringFrequency.MONTHLY -> "FREQ=MONTHLY;INTERVAL=${rule.interval}"
-            RecurringFrequency.QUARTERLY -> "FREQ=MONTHLY;INTERVAL=3"
-            RecurringFrequency.YEARLY -> "FREQ=YEARLY;INTERVAL=1"
+            RecurringFrequency.DAILY -> "FREQ=DAILY;INTERVAL=$interval"
+            RecurringFrequency.WEEKLY -> "FREQ=WEEKLY;INTERVAL=$interval"
+            RecurringFrequency.BIWEEKLY -> "FREQ=WEEKLY;INTERVAL=${2 * interval}"
+            RecurringFrequency.MONTHLY -> "FREQ=MONTHLY;INTERVAL=$interval"
+            RecurringFrequency.QUARTERLY -> "FREQ=MONTHLY;INTERVAL=${3 * interval}"
+            RecurringFrequency.YEARLY -> "FREQ=YEARLY;INTERVAL=$interval"
             RecurringFrequency.CUSTOM -> "FREQ=DAILY;INTERVAL=${rule.interval}"
             RecurringFrequency.WEEKLY_SPECIFIC_DAYS -> {
                 val days = rule.selectedDaysOfWeek?.joinToString(",") { it.name.take(2) } ?: ""

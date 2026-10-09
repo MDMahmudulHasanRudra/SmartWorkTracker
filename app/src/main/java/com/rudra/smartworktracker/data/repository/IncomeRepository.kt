@@ -1,11 +1,15 @@
 package com.rudra.smartworktracker.data.repository
 
+import com.rudra.smartworktracker.data.dao.AccountDao
 import com.rudra.smartworktracker.data.dao.IncomeDao
 import com.rudra.smartworktracker.data.entity.Income
 import com.rudra.smartworktracker.model.IncomeByCategory
 import kotlinx.coroutines.flow.Flow
 
-class IncomeRepository(private val incomeDao: IncomeDao) {
+class IncomeRepository(
+    private val incomeDao: IncomeDao,
+    private val accountDao: AccountDao? = null
+) {
 
     fun getIncomes(page: Int, pageSize: Int): Flow<List<Income>> {
         val offset = (page - 1) * pageSize
@@ -18,10 +22,20 @@ class IncomeRepository(private val incomeDao: IncomeDao) {
 
     suspend fun deleteIncome(income: Income) {
         incomeDao.deleteIncome(income)
+        reverseAccountEffect(income)
     }
 
     suspend fun deleteIncomeById(incomeId: Long) {
+        val income = incomeDao.getIncomeById(incomeId)
         incomeDao.deleteIncomeById(incomeId)
+        income?.let { reverseAccountEffect(it) }
+    }
+
+    /** Takes a deleted income back out of the account it was credited to. */
+    private suspend fun reverseAccountEffect(income: Income) {
+        val accountId = income.accountId ?: return
+        val account = accountDao?.getAccountById(accountId) ?: return
+        accountDao.updateBalance(accountId, account.balance - income.amount)
     }
 
     fun getIncomesBetween(startTime: Long, endTime: Long): Flow<List<Income>> {

@@ -25,5 +25,7 @@ data class Income(
     override val createdAt: Long = System.currentTimeMillis(),
     override val updatedAt: Long = System.currentTimeMillis(),
     override val isDeleted: Boolean = false,
-    override val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY
+    override val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    // Account whose balance this income was added to (null = not linked); added in DB v13
+    val accountId: Long? = null
 ) : BaseEntity

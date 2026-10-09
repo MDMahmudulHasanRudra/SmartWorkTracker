@@ -69,7 +69,10 @@ class LoanRepository(private val loanDao: LoanDao, private val transactionDao: F
     }
 
     suspend fun repayLoan(loan: Loan, amount: Double) {
-        val newRemaining = (loan.remainingAmount - amount).coerceAtLeast(0.0)
+        // Never record more than what is still owed
+        val applied = amount.coerceAtMost(loan.remainingAmount)
+        if (applied <= 0.0) return
+        val newRemaining = (loan.remainingAmount - applied).coerceAtLeast(0.0)
         val isFullyPaid = newRemaining <= 0.0
         
         val updatedLoan = loan.copy(
@@ -83,7 +86,7 @@ class LoanRepository(private val loanDao: LoanDao, private val transactionDao: F
         
         val transaction = FinancialTransaction(
             type = if (loan.loanType == LoanType.BORROWED) TransactionType.LOAN_REPAY else TransactionType.LOAN_RECEIVE,
-            amount = amount,
+            amount = applied,
             source = if (loan.loanType == LoanType.BORROWED) loan.sourceAccount else loan.destinationAccount,
             destination = if (loan.loanType == LoanType.BORROWED) loan.destinationAccount else loan.sourceAccount,
             note = "Payment ${if (loan.loanType == LoanType.BORROWED) "to" else "from"} ${loan.personName}",
@@ -99,8 +102,10 @@ class LoanRepository(private val loanDao: LoanDao, private val transactionDao: F
 
     suspend fun markLoanAsPaid(loan: Loan) {
         val remaining = loan.remainingAmount
+        loanDao.updateLoanProgress(loan.id, 0.0, loan.paidEmis)
         loanDao.markLoanAsPaid(loan.id)
-        
+        if (remaining <= 0.0) return
+
         val transaction = FinancialTransaction(
             type = if (loan.loanType == LoanType.BORROWED) TransactionType.LOAN_REPAY else TransactionType.LOAN_RECEIVE,
             amount = remaining,

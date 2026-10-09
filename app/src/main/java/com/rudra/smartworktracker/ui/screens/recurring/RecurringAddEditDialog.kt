@@ -77,6 +77,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun TemplateSelectionSheet(
@@ -145,7 +146,7 @@ fun TemplateSelectionSheet(
                         }
                     }
                     Text(
-                        text = "$${String.format("%.0f", template.amount)}",
+                        text = "${CurrencyManager.formatWhole(template.amount)}",
                         fontWeight = FontWeight.Bold,
                         color = if (template.transactionType == TransactionType.INCOME) Color(0xFF4CAF50) else Color(0xFFFF5252)
                     )
@@ -429,7 +430,7 @@ fun StepBasicInfo(
             label = { Text("Amount *") },
             placeholder = { Text("0.00") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            leadingIcon = { Text("$") },
+            leadingIcon = { Text(CurrencyManager.symbol()) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -796,7 +797,7 @@ fun ManualExecutionDialog(
                                     Column {
                                         Text(rule.name, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                         Text(
-                                            "$${String.format("%.2f", rule.amount)}",
+                                            "${CurrencyManager.format(rule.amount)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
@@ -839,7 +840,7 @@ fun ExecutionResultDialog(
             Column {
                 Text("Successful: ${result.successCount}")
                 Text("Failed: ${result.failureCount}")
-                Text("Total: $${String.format("%.2f", result.totalAmount)}")
+                Text("Total: ${CurrencyManager.format(result.totalAmount)}")
                 if (result.failedRules.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     result.failedRules.forEach { (name, reason) ->

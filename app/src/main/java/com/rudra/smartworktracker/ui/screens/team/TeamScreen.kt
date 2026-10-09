@@ -171,7 +171,10 @@ fun TeamScreen(onNavigateBack: () -> Unit) {
                         showDutyCalendar = true 
                     }) {
                         BadgedBox(
-                            badge = { if (pendingSwaps.isNotEmpty()) Badge { Text(pendingSwaps.size.toString()) } }
+                            badge = {
+                                val openSwaps = pendingSwaps.count { it.status == SwapStatus.PENDING }
+                                if (openSwaps > 0) Badge { Text(openSwaps.toString()) }
+                            }
                         ) {
                             Icon(Icons.Default.CalendarToday, contentDescription = "Duty Operations", tint = MaterialTheme.colorScheme.primary)
                         }
@@ -503,7 +506,7 @@ fun TeammateRow(teammate: Teammate, onCall: () -> Unit) {
                 Text(text = teammate.role, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onCall, enabled = teammate.phoneNumbers.isNotEmpty()) {
-                Icon(Icons.Default.Call, null, tint = if (teammate.phoneNumbers.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Gray)
+                Icon(Icons.Default.Call, null, tint = if (teammate.phoneNumbers.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -708,14 +711,35 @@ fun SwapsTab(pendingSwaps: List<DutySwap>, onApproveSwap: (DutySwap) -> Unit, on
         if (pendingSwaps.isEmpty()) {
             item { EmptyState(icon = Icons.Default.SwapHoriz, title = "No pending swaps", description = "All caught up!") }
         } else {
-            items(pendingSwaps) { swap -> 
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            // Pending first; resolved swaps stay visible as history without action buttons
+            items(pendingSwaps.sortedBy { it.status != SwapStatus.PENDING }, key = { it.id }) { swap ->
+                val isPending = swap.status == SwapStatus.PENDING
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPending) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Duty Swap Request", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                        Text("${swap.requestDate} ↔ ${swap.swapDate}", color = MaterialTheme.colorScheme.onTertiaryContainer)
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { onRejectSwap(swap) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Reject") }
-                            Button(onClick = { onApproveSwap(swap) }, modifier = Modifier.weight(1f)) { Text("Approve") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Duty Swap Request", fontWeight = FontWeight.ExtraBold)
+                            if (!isPending) {
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text(swap.status.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                                )
+                            }
+                        }
+                        Text(
+                            "${swap.requestDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d"))} ↔ " +
+                                swap.swapDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d"))
+                        )
+                        if (isPending) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedButton(onClick = { onRejectSwap(swap) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Reject") }
+                                Button(onClick = { onApproveSwap(swap) }, modifier = Modifier.weight(1f)) { Text("Approve") }
+                            }
                         }
                     }
                 }

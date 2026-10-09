@@ -15,9 +15,9 @@ import com.rudra.smartworktracker.model.WorkLog
 import com.rudra.smartworktracker.ui.AddEntryUiState
 import com.rudra.smartworktracker.ui.EntryType
 import com.rudra.smartworktracker.utils.CurrencyManager
+import com.rudra.smartworktracker.utils.DateTimeUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -31,21 +31,24 @@ class AddEntryViewModel(
     private val _uiState = MutableStateFlow(AddEntryUiState())
     val uiState = _uiState.asStateFlow()
 
-    private val workLogId: Long? = savedStateHandle["workLogId"]
+    // The nav argument defaults to -1 for "new entry"; only positive ids are real rows
+    private val editingWorkLogId: Long? = savedStateHandle.get<Long>("workLogId")?.takeIf { it > 0 }
+    private var editingWorkLog: WorkLog? = null
+
+    val isEditing: Boolean get() = editingWorkLogId != null
 
     init {
-        if (workLogId != null && workLogId != -1L) {
+        editingWorkLogId?.let { id ->
             viewModelScope.launch {
-                workLogRepository.getWorkLogById(workLogId).collectLatest { workLog ->
-                    workLog?.let {
-                        _uiState.update {
-                            it.copy(
-                                workType = workLog.workType,
-                                workStartTime = workLog.startTime ?: "",
-                                workEndTime = workLog.endTime ?: ""
-                            )
-                        }
-                    }
+                val workLog = workLogRepository.getWorkLogByIdOnce(id) ?: return@launch
+                editingWorkLog = workLog
+                _uiState.update {
+                    it.copy(
+                        selectedEntryType = EntryType.WORK_TIME,
+                        workType = workLog.workType,
+                        workStartTime = workLog.startTime ?: "",
+                        workEndTime = workLog.endTime ?: ""
+                    )
                 }
             }
         }
@@ -64,24 +67,25 @@ class AddEntryViewModel(
     }
 
     fun saveExpense() {
+        val amount = _uiState.value.expenseAmount.toDoubleOrNull()
+        if (amount == null || amount <= 0) {
+            _uiState.update { it.copy(errorMessage = "Please enter a valid amount") }
+            return
+        }
+        if (_uiState.value.isLoading) return
+        _uiState.update { it.copy(errorMessage = null, isLoading = true) }
         viewModelScope.launch {
-            val amount = _uiState.value.expenseAmount.toDoubleOrNull()
-            if (amount == null || amount <= 0) {
-                _uiState.update { it.copy(errorMessage = "Please enter a valid amount") }
-                return@launch
-            }
-            _uiState.update { it.copy(errorMessage = null) }
             val expense = Expense(
                 amount = amount,
                 currency = CurrencyManager.getCurrencyCode(),
                 category = _uiState.value.expenseCategory,
                 merchant = null,
-                notes = _uiState.value.expenseNotes,
+                notes = _uiState.value.expenseNotes.trim(),
                 timestamp = System.currentTimeMillis(),
                 imageUri = null
             )
             expenseRepository.insertExpense(expense)
-            _uiState.update { it.copy(isEntrySaved = true) }
+            _uiState.update { it.copy(isEntrySaved = true, isLoading = false) }
         }
     }
 
@@ -98,21 +102,42 @@ class AddEntryViewModel(
     }
 
     fun saveWorkLog() {
+        val state = _uiState.value
+        val needsTimes = state.workType != com.rudra.smartworktracker.model.WorkType.OFF_DAY
+        if (needsTimes && (!DateTimeUtils.isValidTime(state.workStartTime) || !DateTimeUtils.isValidTime(state.workEndTime))) {
+            _uiState.update { it.copy(errorMessage = "Please choose valid start and end times") }
+            return
+        }
+        if (state.isLoading) return
+        _uiState.update { it.copy(errorMessage = null, isLoading = true) }
+
         viewModelScope.launch {
-            if (_uiState.value.workStartTime.isBlank() || _uiState.value.workEndTime.isBlank()) {
-                _uiState.update { it.copy(errorMessage = "Please enter start and end times") }
-                return@launch
+            val original = editingWorkLog
+            val now = System.currentTimeMillis()
+            val isOvertime = state.workType == com.rudra.smartworktracker.model.WorkType.OVERTIME
+            if (original != null) {
+                // Editing keeps the log's original date (it used to jump to today)
+                workLogRepository.updateWorkLog(
+                    original.copy(
+                        workType = state.workType,
+                        startTime = state.workStartTime.takeIf { needsTimes },
+                        endTime = state.workEndTime.takeIf { needsTimes },
+                        isOvertime = isOvertime || original.isOvertime && state.workType == original.workType,
+                        updatedAt = now
+                    )
+                )
+            } else {
+                workLogRepository.insertWorkLog(
+                    WorkLog(
+                        date = Date(now),
+                        workType = state.workType,
+                        startTime = state.workStartTime.takeIf { needsTimes },
+                        endTime = state.workEndTime.takeIf { needsTimes },
+                        isOvertime = isOvertime
+                    )
+                )
             }
-            _uiState.update { it.copy(errorMessage = null) }
-            val workLog = WorkLog(
-                id = workLogId ?: 0,
-                date = Date(),
-                workType = _uiState.value.workType,
-                startTime = _uiState.value.workStartTime,
-                endTime = _uiState.value.workEndTime
-            )
-            workLogRepository.insertWorkLog(workLog)
-            _uiState.update { it.copy(isEntrySaved = true) }
+            _uiState.update { it.copy(isEntrySaved = true, isLoading = false) }
         }
     }
 
@@ -125,24 +150,25 @@ class AddEntryViewModel(
     }
 
     fun saveMeal() {
+        val amount = _uiState.value.mealAmount.toDoubleOrNull()
+        if (amount == null || amount <= 0) {
+            _uiState.update { it.copy(errorMessage = "Please enter a valid meal amount") }
+            return
+        }
+        if (_uiState.value.isLoading) return
+        _uiState.update { it.copy(errorMessage = null, isLoading = true) }
         viewModelScope.launch {
-            val amount = _uiState.value.mealAmount.toDoubleOrNull()
-            if (amount == null || amount <= 0) {
-                _uiState.update { it.copy(errorMessage = "Please enter a valid meal amount") }
-                return@launch
-            }
-            _uiState.update { it.copy(errorMessage = null) }
             val mealExpense = Expense(
                 amount = amount,
                 currency = CurrencyManager.getCurrencyCode(),
                 category = ExpenseCategory.MEAL,
                 merchant = null,
-                notes = _uiState.value.mealNotes,
+                notes = _uiState.value.mealNotes.trim(),
                 timestamp = System.currentTimeMillis(),
                 imageUri = null
             )
             expenseRepository.insertExpense(mealExpense)
-            _uiState.update { it.copy(isEntrySaved = true) }
+            _uiState.update { it.copy(isEntrySaved = true, isLoading = false) }
         }
     }
 

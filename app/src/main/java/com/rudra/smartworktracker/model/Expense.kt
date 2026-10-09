@@ -26,7 +26,9 @@ data class Expense(
     override val createdAt: Long = System.currentTimeMillis(),
     override val updatedAt: Long = System.currentTimeMillis(),
     override val isDeleted: Boolean = false,
-    override val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY
+    override val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    // Account this expense was paid from (null = not linked); added in DB v13
+    val accountId: Long? = null
 ) : BaseEntity
 
 enum class ExpenseCategory(val displayName: String) {

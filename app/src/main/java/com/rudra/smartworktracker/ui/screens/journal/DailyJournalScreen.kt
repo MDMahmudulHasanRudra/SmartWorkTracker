@@ -151,16 +151,24 @@ fun CustomTab(
 fun JournalEditor(viewModel: DailyJournalViewModel, onSave: (DailyJournal) -> Unit) {
     val todayJournal by viewModel.todayJournal.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
+    val loadedJournal by viewModel.loadedJournal.collectAsState()
     val context = LocalContext.current
 
-    var intention by remember(todayJournal, selectedDate) {
-        mutableStateOf(todayJournal?.morningIntention ?: "")
-    }
-    var reflection by remember(todayJournal, selectedDate) {
-        mutableStateOf(todayJournal?.eveningReflection ?: "")
-    }
-    var gratitude by remember(todayJournal, selectedDate) {
-        mutableStateOf(todayJournal?.gratitude ?: "")
+    // Text is loaded from the database once per date. Re-keying on every DB emission (as before)
+    // reset the fields after each auto-save and dropped whatever was typed meanwhile.
+    var intention by remember(selectedDate) { mutableStateOf("") }
+    var reflection by remember(selectedDate) { mutableStateOf("") }
+    var gratitude by remember(selectedDate) { mutableStateOf("") }
+    var initializedFor by remember { mutableStateOf<java.time.LocalDate?>(null) }
+
+    LaunchedEffect(loadedJournal, selectedDate) {
+        val load = loadedJournal ?: return@LaunchedEffect
+        if (load.date == selectedDate && initializedFor != selectedDate) {
+            intention = load.journal?.morningIntention ?: ""
+            reflection = load.journal?.eveningReflection ?: ""
+            gratitude = load.journal?.gratitude ?: ""
+            initializedFor = selectedDate
+        }
     }
     var currentSection by remember { mutableIntStateOf(0) }
 
@@ -179,7 +187,12 @@ fun JournalEditor(viewModel: DailyJournalViewModel, onSave: (DailyJournal) -> Un
 
     LaunchedEffect(intention, reflection, gratitude, autoSaveTrigger) {
         autoSaveJob.value?.cancel()
-        if (intention.isNotBlank() || reflection.isNotBlank() || gratitude.isNotBlank()) {
+        val unchanged = todayJournal?.let {
+            it.morningIntention == intention && it.eveningReflection == reflection && it.gratitude == gratitude
+        } ?: false
+        if (initializedFor == selectedDate && !unchanged &&
+            (intention.isNotBlank() || reflection.isNotBlank() || gratitude.isNotBlank())
+        ) {
             autoSaveJob.value = coroutineScope.launch {
                 kotlinx.coroutines.delay(2000) // 2 second delay
                 val journalEntry = (todayJournal ?: DailyJournal(date = selectedDate)).copy(

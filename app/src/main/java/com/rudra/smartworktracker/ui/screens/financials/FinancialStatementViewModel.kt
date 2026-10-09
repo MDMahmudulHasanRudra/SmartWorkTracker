@@ -284,8 +284,12 @@ class FinancialStatementViewModel(
             entries
         }
         
-        // Combine all transactions
+        // Combine all transactions, restricted to the selected date range (if any) so the
+        // totals describe the same period as the list
+        val startMillis = params.startDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        val endMillis = params.endDate?.plusDays(1)?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
         val allTransactions = (incomeTransactions + expenseTransactions + financialTransactions)
+            .filter { (startMillis == null || it.date >= startMillis) && (endMillis == null || it.date < endMillis) }
             .sortedByDescending { it.date }
         
         // Calculate totals - using credit entries for income, debit entries for expenses
@@ -308,14 +312,6 @@ class FinancialStatementViewModel(
                 (it.type == TransactionType.EXPENSE || it.type == TransactionType.EMI_PAID) && it.entryType == EntryType.DEBIT
             }
             else -> filtered
-        }
-
-        // FIXED: Date filter is now independent of filter type
-        // Apply date range filter regardless of transaction type filter
-        if (params.startDate != null && params.endDate != null) {
-            val startMillis = params.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val endMillis = params.endDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            filtered = filtered.filter { it.date in startMillis until endMillis }
         }
 
         // Apply Limit
@@ -366,12 +362,8 @@ class FinancialStatementViewModel(
         limitFlow.value = newLimit
     }
 
+    /** Deletes the source record; works from either the debit or the credit row of a pair. */
     fun deleteTransaction(transaction: UnifiedTransaction) {
-        // Skip credit entries - they will be deleted with their debit pair
-        if (transaction.id.endsWith("_credit")) {
-            return
-        }
-        
         viewModelScope.launch {
             try {
                 when (transaction.sourceType) {

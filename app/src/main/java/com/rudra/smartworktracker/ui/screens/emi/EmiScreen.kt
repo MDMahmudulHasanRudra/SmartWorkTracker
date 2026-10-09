@@ -71,10 +71,12 @@ fun EmiScreen(
                 onQueryChange = { viewModel.setSearchQuery(it) }
             )
 
-            TabRow(
+            // Scrollable: five tabs with counts don't fit a fixed row on phones
+            ScrollableTabRow(
                 selectedTabIndex = EmiTab.entries.indexOf(uiState.selectedTab),
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+                contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 12.dp
             ) {
                 EmiTab.entries.forEach { tab ->
                     Tab(

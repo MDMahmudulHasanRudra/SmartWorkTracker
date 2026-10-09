@@ -1,7 +1,12 @@
 package com.rudra.smartworktracker.alarm
 
+import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.MediaPlayer
+import android.net.Uri
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
@@ -31,7 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rudra.smartworktracker.model.Schedule
+import androidx.core.content.ContextCompat
 import com.rudra.smartworktracker.ui.theme.SmartWorkTrackerTheme
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -40,6 +45,15 @@ class AlarmActivity : ComponentActivity() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var alarmIntent by mutableStateOf<Intent?>(null)
+
+    // AlarmReceiver broadcasts this when the alarm is dismissed/snoozed from the notification
+    private val stopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            stopAlarm()
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,21 +72,31 @@ class AlarmActivity : ComponentActivity() {
             )
         }
 
-        val scheduleId = intent.getLongExtra("SCHEDULE_ID", -1L)
-        val scheduleTitle = intent.getStringExtra("SCHEDULE_TITLE") ?: "Schedule Alarm"
+        alarmIntent = intent
+        ContextCompat.registerReceiver(
+            this,
+            stopReceiver,
+            IntentFilter(AlarmReceiver.ACTION_STOP_ALARM),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         setContent {
+            val current = alarmIntent ?: intent
             SmartWorkTrackerTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AlarmScreen(
-                        scheduleTitle = scheduleTitle,
+                        scheduleTitle = current.getStringExtra(AlarmScheduler.EXTRA_SCHEDULE_TITLE) ?: "Schedule Alarm",
+                        snoozeMinutes = current.getIntExtra(AlarmScheduler.EXTRA_SNOOZE_MINUTES, 5),
+                        canSnooze = current.getIntExtra(AlarmScheduler.EXTRA_SNOOZE_REMAINING, 3) > 0,
                         onDismiss = {
                             stopAlarm()
+                            clearNotification(current)
                             finish()
                         },
                         onSnooze = { minutes ->
-                            snoozeAlarm(scheduleId, scheduleTitle, minutes)
+                            AlarmReceiver.snooze(this, current, minutes)
                             stopAlarm()
+                            clearNotification(current)
                             finish()
                         }
                     )
@@ -80,70 +104,78 @@ class AlarmActivity : ComponentActivity() {
             }
         }
 
-        startAlarm()
+        startAlarm(intent)
     }
 
-    private fun startAlarm() {
-        // Start playing alarm sound
-        try {
-            val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            mediaPlayer = MediaPlayer.create(this, alarmSound)
-            mediaPlayer?.isLooping = true
-            mediaPlayer?.start()
-        } catch (e: Exception) {
-            try {
-                val notificationSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                mediaPlayer = MediaPlayer.create(this, notificationSound)
-                mediaPlayer?.isLooping = true
-                mediaPlayer?.start()
-            } catch (e2: Exception) {
-                e2.printStackTrace()
-            }
+    // singleTask: a second alarm while this one is showing arrives here instead of onCreate
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        alarmIntent?.let { clearNotification(it) }
+        setIntent(intent)
+        alarmIntent = intent
+        stopAlarm()
+        startAlarm(intent)
+    }
+
+    private fun clearNotification(intent: Intent) {
+        val scheduleId = intent.getLongExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, -1L)
+        val notificationId = intent.getIntExtra(
+            AlarmReceiver.EXTRA_NOTIFICATION_ID,
+            AlarmReceiver.notificationIdFor(scheduleId)
+        )
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notificationId)
+    }
+
+    private fun startAlarm(intent: Intent) {
+        val volume = intent.getIntExtra(AlarmScheduler.EXTRA_VOLUME, 80).coerceIn(0, 100) / 100f
+        val customUri = intent.getStringExtra(AlarmScheduler.EXTRA_RINGTONE_URI)?.let { Uri.parse(it) }
+        val candidates = listOfNotNull(
+            customUri,
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        )
+        // MediaPlayer.create returns null (rather than throwing) for an unplayable Uri
+        for (uri in candidates) {
+            val player = try {
+                MediaPlayer.create(this, uri)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            player.isLooping = true
+            player.setVolume(volume, volume)
+            player.start()
+            mediaPlayer = player
+            break
         }
 
-        // Start vibrating
+        if (intent.getStringExtra(AlarmScheduler.EXTRA_VIBRATION) == "none") return
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 1000), 0))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator?.vibrate(longArrayOf(0, 500, 1000), 0)
-        }
+        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 1000), 0))
     }
 
     private fun stopAlarm() {
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
+        mediaPlayer?.let {
+            if (it.isPlaying) it.stop()
+            it.release()
+        }
         mediaPlayer = null
 
         vibrator?.cancel()
-    }
-
-    private fun snoozeAlarm(scheduleId: Long, title: String, minutes: Int) {
-        val snoozeTime = LocalTime.now().plusMinutes(minutes.toLong())
-        val alarmScheduler = AlarmScheduler(this)
-        
-        // Create a temporary schedule for snooze
-        val snoozeSchedule = Schedule(
-            id = if (scheduleId != -1L) scheduleId + 1000000 else System.currentTimeMillis(), // Unique ID for snooze
-            title = "Snooze: $title",
-            time = snoozeTime,
-            isEnabled = true,
-            isRepeating = false
-        )
-        
-        alarmScheduler.schedule(snoozeSchedule)
+        vibrator = null
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        unregisterReceiver(stopReceiver)
         stopAlarm()
+        super.onDestroy()
     }
 }
 
 @Composable
 fun AlarmScreen(
     scheduleTitle: String,
+    snoozeMinutes: Int = 5,
+    canSnooze: Boolean = true,
     onDismiss: () -> Unit,
     onSnooze: (Int) -> Unit
 ) {
@@ -213,23 +245,24 @@ fun AlarmScreen(
                     onClick = onDismiss
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Snooze 5 Min
-                    SnoozeButton(
-                        text = "Snooze 5m",
-                        modifier = Modifier.weight(1f),
-                        onClick = { onSnooze(5) }
-                    )
-                    
-                    // Snooze 15 Min
-                    SnoozeButton(
-                        text = "Snooze 15m",
-                        modifier = Modifier.weight(1f),
-                        onClick = { onSnooze(15) }
-                    )
+                if (canSnooze) {
+                    val longSnooze = (snoozeMinutes * 3).coerceAtLeast(snoozeMinutes + 1)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        SnoozeButton(
+                            text = "Snooze ${snoozeMinutes}m",
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSnooze(snoozeMinutes) }
+                        )
+
+                        SnoozeButton(
+                            text = "Snooze ${longSnooze}m",
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSnooze(longSnooze) }
+                        )
+                    }
                 }
             }
         }

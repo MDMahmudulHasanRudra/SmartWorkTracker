@@ -20,8 +20,14 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
     private val _dutyCalendar = MutableStateFlow<Map<LocalDate, List<CalendarDuty>>>(emptyMap())
     val dutyCalendar: StateFlow<Map<LocalDate, List<CalendarDuty>>> = _dutyCalendar.asStateFlow()
 
-    private val _pendingSwaps = MutableStateFlow<List<DutySwap>>(emptyList())
+    // Persisted so swap requests survive leaving the screen / restarting the app
+    private val _pendingSwaps = MutableStateFlow(sharedPreferenceManager.getDutySwaps())
     val pendingSwaps: StateFlow<List<DutySwap>> = _pendingSwaps.asStateFlow()
+
+    private fun updateSwaps(swaps: List<DutySwap>) {
+        _pendingSwaps.value = swaps
+        sharedPreferenceManager.saveDutySwaps(swaps)
+    }
 
     private val _uiEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val uiEvent = _uiEvent.asSharedFlow()
@@ -182,7 +188,9 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
         return DutyStats(
             totalDuties = totalDutiesCount,
             upcomingDuties = manualDuties.count { it.date.isAfter(LocalDate.now().minusDays(1)) },
-            completedSwaps = 0,
+            completedSwaps = _pendingSwaps.value.count {
+                it.status == SwapStatus.APPROVED && (it.requesterId == teammateId || it.responderId == teammateId)
+            },
             overtimeHours = totalOvertimeHours
         )
     }
@@ -197,7 +205,7 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
     }
 
     private fun loadAndCleanTeams(): List<Team> {
-        return sharedPreferenceManager.getTeams() ?: emptyList()
+        return sharedPreferenceManager.getTeams()
     }
 
     fun addTeammate(teamName: String, teammate: Teammate) {
@@ -219,9 +227,7 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
             swapDate = swapDate,
             reason = "Duty Swap Request"
         )
-        val currentSwaps = _pendingSwaps.value.toMutableList()
-        currentSwaps.add(swap)
-        _pendingSwaps.value = currentSwaps
+        updateSwaps(_pendingSwaps.value + swap)
         
         notificationManager?.sendSwapRequestNotification(
             requester?.name ?: "A teammate",
@@ -238,7 +244,7 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
         val index = currentSwaps.indexOfFirst { it.id == swap.id }
         if (index != -1) {
             currentSwaps[index] = swap.copy(status = SwapStatus.APPROVED)
-            _pendingSwaps.value = currentSwaps
+            updateSwaps(currentSwaps)
             
             val teams = _teams.value
             var requesterInfo: Pair<String, Teammate>? = null
@@ -297,7 +303,7 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
         val index = currentSwaps.indexOfFirst { it.id == swap.id }
         if (index != -1) {
             currentSwaps[index] = swap.copy(status = SwapStatus.REJECTED)
-            _pendingSwaps.value = currentSwaps
+            updateSwaps(currentSwaps)
             
             viewModelScope.launch {
                 _uiEvent.emit("Swap Request Rejected")
@@ -305,7 +311,10 @@ class TeamViewModel(private val sharedPreferenceManager: SharedPreferenceManager
         }
     }
 
-    fun autoScheduleDuties(id: String, now: LocalDate, days: Int) {}
+    /** Removes swaps that were already approved or rejected. */
+    fun clearResolvedSwaps() {
+        updateSwaps(_pendingSwaps.value.filter { it.status == SwapStatus.PENDING })
+    }
 }
 
 data class CalendarDuty(

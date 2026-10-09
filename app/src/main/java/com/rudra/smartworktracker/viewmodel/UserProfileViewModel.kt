@@ -40,12 +40,14 @@ class UserProfileViewModel(
         }
     }
 
-    fun saveProfile(profile: UserProfile) {
+    /** Saves and only then calls [onSaved], so a failed write doesn't navigate away silently. */
+    fun saveProfile(profile: UserProfile, onSaved: () -> Unit = {}, onError: (String) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 repository.saveUserProfile(profile.copy(updatedAt = System.currentTimeMillis()))
+                onSaved()
             } catch (e: Exception) {
-                _profileState.value = ProfileState.Error(e.message ?: "Failed to save profile")
+                onError(e.message ?: "Failed to save profile")
             }
         }
     }

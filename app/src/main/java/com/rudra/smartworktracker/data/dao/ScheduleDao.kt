@@ -14,6 +14,12 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules ORDER BY time ASC")
     fun getAllSchedules(): Flow<List<Schedule>>
 
+    @Query("SELECT * FROM schedules WHERE id = :id")
+    suspend fun getScheduleById(id: Long): Schedule?
+
+    @Query("SELECT * FROM schedules")
+    suspend fun getAllSchedulesOnce(): List<Schedule>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSchedule(schedule: Schedule): Long
 

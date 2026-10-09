@@ -40,3 +40,17 @@
 -allowaccessmodification
 -repackageclasses ''
 -optimizationpasses 5
+
+# Gson-persisted models (SharedPreferences team data, JSON backups). Field names are the
+# storage format, so R8 must not rename them or stored data becomes unreadable after an update.
+-keepattributes Signature, *Annotation*
+-keep class com.rudra.smartworktracker.ui.screens.team.Team { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.Teammate { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.DutySchedule { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.AssignedDuty { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.Availability { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.DutySwap { *; }
+-keep class com.rudra.smartworktracker.ui.screens.team.SwapStatus { *; }
+-keep class com.rudra.smartworktracker.data.backup.** { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep class * extends com.google.gson.TypeAdapter

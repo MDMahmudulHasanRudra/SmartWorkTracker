@@ -110,7 +110,7 @@ val party = Party(
 fun AchievementItem(achievement: Achievement) {
     val cardColor = if (achievement.unlocked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val icon = if (achievement.unlocked) Icons.Default.EmojiEvents else Icons.Default.Lock
-    val iconColor = if (achievement.unlocked) Color(0xFFFFA000) else Color.Gray
+    val iconColor = if (achievement.unlocked) Color(0xFFFFA000) else MaterialTheme.colorScheme.outline
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -129,7 +129,7 @@ fun AchievementItem(achievement: Achievement) {
             Spacer(modifier = Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(achievement.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text(achievement.description, fontSize = 14.sp, color = Color.Gray)
+                Text(achievement.description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

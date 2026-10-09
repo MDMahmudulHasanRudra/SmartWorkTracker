@@ -10,6 +10,7 @@ import com.rudra.smartworktracker.engine.FusionEngine
 import com.rudra.smartworktracker.engine.FusionResult
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 class TransferViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -88,7 +89,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
             return ValidationResult.Error("Please enter a valid amount")
         }
         if (amount > fromAccount.balance) {
-            return ValidationResult.Error("Insufficient balance (Available: ৳ ${fromAccount.balance.toInt()})")
+            return ValidationResult.Error("Insufficient balance (Available: ${CurrencyManager.formatWhole(fromAccount.balance)})")
         }
 
         return ValidationResult.Valid

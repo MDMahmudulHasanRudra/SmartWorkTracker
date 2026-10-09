@@ -33,6 +33,30 @@ class RecurringEngine(
 ) {
     companion object {
         private const val DEFAULT_MINIMUM_BALANCE = 0.0
+        private const val DAY_MS = 24L * 60 * 60 * 1000
+    }
+
+    /**
+     * Next occurrence of [rule] after [from], honouring the selected weekdays of
+     * WEEKLY_SPECIFIC_DAYS rules (the plain frequency overload only knows "+1 week").
+     */
+    fun nextExecutionDateFor(rule: RecurringRule, from: Long = rule.nextExecutionDate): Long {
+        val selectedDays = rule.selectedDaysOfWeek
+        return if (rule.frequency == RecurringFrequency.WEEKLY_SPECIFIC_DAYS && !selectedDays.isNullOrEmpty()) {
+            calculateNextExecutionDateWithDays(from, selectedDays, rule.preferredTime)
+        } else {
+            calculateNextExecutionDate(from, rule.frequency, rule.interval, rule.preferredTime)
+        }
+    }
+
+    /** Moves the rule to its next occurrence, or deactivates it once past its end date. */
+    private suspend fun advanceRule(rule: RecurringRule) {
+        val nextDate = nextExecutionDateFor(rule)
+        if (rule.endDate != null && nextDate > rule.endDate) {
+            recurringRepository.updateRuleActiveStatus(rule.id, false)
+        } else {
+            recurringRepository.updateNextExecutionDate(rule.id, nextDate)
+        }
     }
 
     fun calculateNextExecutionDate(
@@ -135,56 +159,139 @@ class RecurringEngine(
         return rule.selectedDaysOfWeek?.contains(today) ?: false
     }
 
-    suspend fun executeRule(rule: RecurringRule, currentBalance: Double = DEFAULT_MINIMUM_BALANCE): EngineExecutionResult {
-        val effectiveBalance = if (rule.accountId != null && accountRepository != null) {
-            accountRepository.getAccountById(rule.accountId)?.balance ?: currentBalance
-        } else {
-            currentBalance
-        }
-
-        val balanceCheck = checkBalanceProtection(rule, effectiveBalance)
+    /**
+     * Executes one occurrence of [rule].
+     *
+     * With [automatic] = true (background processing) a failed occurrence is recorded as a
+     * FAILED/SKIPPED transaction and the rule moves on to its next date, so the user can retry it
+     * from the Recurring screen instead of the worker re-attempting (and re-notifying) every hour.
+     */
+    suspend fun executeRule(
+        rule: RecurringRule,
+        currentBalance: Double = DEFAULT_MINIMUM_BALANCE,
+        automatic: Boolean = false
+    ): EngineExecutionResult {
+        val balanceCheck = checkBalanceProtection(rule, effectiveBalance(rule, currentBalance))
         if (!balanceCheck.canExecute) {
-            return EngineExecutionResult(
+            val result = EngineExecutionResult(
                 success = false,
                 reason = balanceCheck.reason ?: "Insufficient balance",
                 shouldReschedule = balanceCheck.shouldReschedule,
-                shouldSkip = balanceCheck.shouldSkip
+                shouldSkip = balanceCheck.shouldSkip,
+                rule = rule
             )
+            if (automatic) {
+                recurringRepository.insertTransaction(
+                    createTransactionFromRule(rule).copy(
+                        status = if (balanceCheck.shouldSkip) RecurringTransactionStatus.SKIPPED else RecurringTransactionStatus.FAILED,
+                        isSkipped = balanceCheck.shouldSkip,
+                        failureReason = result.reason,
+                        skipReason = if (balanceCheck.shouldSkip) result.reason else null
+                    )
+                )
+                advanceRule(rule)
+            }
+            return result
         }
 
-        val transaction = createTransactionFromRule(rule)
-        val transactionId = recurringRepository.insertTransaction(transaction)
+        val transactionId = recurringRepository.insertTransaction(createTransactionFromRule(rule))
 
-        return try {
-            val result = when (rule.transactionType) {
-                TransactionType.INCOME -> executeIncome(rule, transactionId)
-                TransactionType.EXPENSE -> executeExpense(rule, transactionId)
-                TransactionType.SAVINGS_ADD -> executeSavings(rule, transactionId)
-                TransactionType.SAVINGS_WITHDRAW -> executeSavingsWithdraw(rule, transactionId)
-                TransactionType.TRANSFER -> executeTransfer(rule, transactionId)
-                else -> EngineExecutionResult(success = false, reason = "Unsupported transaction type")
-            }
-
-            if (result.success) {
-                recurringRepository.markTransactionExecuted(transactionId, RecurringTransactionStatus.EXECUTED)
-
-                val nextDate = calculateNextExecutionDate(
-                    rule.nextExecutionDate, rule.frequency, rule.interval, rule.preferredTime
-                )
-
-                if (rule.endDate != null && nextDate > rule.endDate) {
-                    recurringRepository.updateRuleActiveStatus(rule.id, false)
-                } else {
-                    recurringRepository.updateNextExecutionDate(rule.id, nextDate)
-                }
-            } else {
-                recurringRepository.markTransactionFailed(transactionId, result.reason)
-            }
-
-            result
+        val result = try {
+            performExecution(rule)
         } catch (e: Exception) {
-            recurringRepository.markTransactionFailed(transactionId, e.message)
             EngineExecutionResult(success = false, reason = e.message ?: "Unknown error", shouldReschedule = true)
+        }.copy(rule = rule)
+
+        if (result.success) {
+            recurringRepository.markTransactionExecuted(transactionId, RecurringTransactionStatus.EXECUTED)
+            advanceRule(rule)
+        } else {
+            recurringRepository.markTransactionFailed(transactionId, result.reason)
+            if (automatic) advanceRule(rule)
+        }
+        return result
+    }
+
+    /**
+     * Executes a transaction that was queued for confirmation, confirmed by the user, or
+     * snoozed for a retry. The rule itself was already advanced when the transaction was created.
+     */
+    suspend fun executePendingTransaction(
+        transaction: RecurringTransaction,
+        currentBalance: Double = DEFAULT_MINIMUM_BALANCE
+    ): EngineExecutionResult {
+        val rule = recurringRepository.getRuleById(transaction.ruleId)
+        if (rule == null) {
+            val reason = "Recurring rule no longer exists"
+            recurringRepository.markTransactionFailed(transaction.id, reason)
+            return EngineExecutionResult(success = false, reason = reason)
+        }
+
+        // Execute with the amounts/accounts captured on the transaction, not the (possibly edited) rule
+        val snapshot = rule.copy(
+            amount = transaction.amount,
+            category = transaction.category,
+            sourceAccount = transaction.sourceAccount,
+            destinationAccount = transaction.destinationAccount,
+            accountId = transaction.accountId,
+            destinationAccountId = transaction.destinationAccountId
+        )
+
+        val balanceCheck = checkBalanceProtection(snapshot, effectiveBalance(snapshot, currentBalance))
+        if (!balanceCheck.canExecute) {
+            val reason = balanceCheck.reason ?: "Insufficient balance"
+            recurringRepository.markTransactionFailed(transaction.id, reason)
+            return EngineExecutionResult(success = false, reason = reason, rule = snapshot)
+        }
+
+        recurringRepository.updateTransactionStatus(transaction.id, RecurringTransactionStatus.EXECUTING)
+        val result = try {
+            performExecution(snapshot)
+        } catch (e: Exception) {
+            EngineExecutionResult(success = false, reason = e.message ?: "Unknown error")
+        }.copy(rule = snapshot)
+
+        if (result.success) {
+            recurringRepository.markTransactionExecuted(transaction.id, RecurringTransactionStatus.EXECUTED)
+        } else {
+            recurringRepository.markTransactionFailed(transaction.id, result.reason)
+        }
+        return result
+    }
+
+    /** Creates a PENDING transaction for a rule that requires manual confirmation. */
+    private suspend fun queueForConfirmation(rule: RecurringRule): EngineExecutionResult {
+        recurringRepository.insertTransaction(
+            createTransactionFromRule(rule).copy(
+                status = RecurringTransactionStatus.PENDING,
+                isConfirmed = false
+            )
+        )
+        advanceRule(rule)
+        return EngineExecutionResult(
+            success = true,
+            reason = "Awaiting confirmation",
+            awaitingConfirmation = true,
+            rule = rule
+        )
+    }
+
+    private suspend fun effectiveBalance(rule: RecurringRule, fallback: Double): Double {
+        return if (rule.accountId != null && accountRepository != null) {
+            accountRepository.getAccountById(rule.accountId)?.balance ?: fallback
+        } else {
+            fallback
+        }
+    }
+
+    private suspend fun performExecution(rule: RecurringRule): EngineExecutionResult {
+        return when (rule.transactionType) {
+            TransactionType.INCOME -> executeIncome(rule)
+            TransactionType.EXPENSE -> executeExpense(rule)
+            TransactionType.SAVINGS_ADD -> executeSavings(rule)
+            TransactionType.SAVINGS_WITHDRAW -> executeSavingsWithdraw(rule)
+            TransactionType.TRANSFER -> executeTransfer(rule)
+            else -> EngineExecutionResult(success = false, reason = "Unsupported transaction type")
         }
     }
 
@@ -233,11 +340,12 @@ class RecurringEngine(
             accountId = rule.accountId,
             destinationAccountId = rule.destinationAccountId,
             scheduledDate = rule.nextExecutionDate,
-            status = if (rule.autoExecute) RecurringTransactionStatus.PENDING else RecurringTransactionStatus.CONFIRMED
+            status = RecurringTransactionStatus.EXECUTING,
+            isConfirmed = true
         )
     }
 
-    private suspend fun executeIncome(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
+    private suspend fun executeIncome(rule: RecurringRule): EngineExecutionResult {
         return try {
             val income = Income(
                 amount = rule.amount,
@@ -245,12 +353,13 @@ class RecurringEngine(
                 category = rule.category ?: "Salary",
                 timestamp = System.currentTimeMillis(),
                 source = rule.sourceAccount.name,
-                syncStatus = SyncStatus.LOCAL_ONLY
+                syncStatus = SyncStatus.LOCAL_ONLY,
+                accountId = rule.accountId.takeIf { accountRepository != null }
             )
             incomeRepository.insertIncome(income)
 
             rule.accountId?.let { accountId ->
-                accountRepository?.addIncomeToAccount(accountId, rule.amount)
+                accountRepository?.adjustBalance(accountId, rule.amount)
             }
 
             EngineExecutionResult(success = true, reason = "Income added successfully")
@@ -259,7 +368,7 @@ class RecurringEngine(
         }
     }
 
-    private suspend fun executeExpense(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
+    private suspend fun executeExpense(rule: RecurringRule): EngineExecutionResult {
         return try {
             val expense = Expense(
                 id = UUID.randomUUID().toString(),
@@ -268,12 +377,14 @@ class RecurringEngine(
                 merchant = rule.name,
                 notes = rule.description,
                 timestamp = System.currentTimeMillis(),
-                syncStatus = SyncStatus.LOCAL_ONLY
+                syncStatus = SyncStatus.LOCAL_ONLY,
+                accountId = rule.accountId.takeIf { accountRepository != null }
             )
             expenseRepository.insertExpense(expense)
 
+            // Balance protection already ran; CRITICAL rules may take the account negative
             rule.accountId?.let { accountId ->
-                accountRepository?.deductExpenseFromAccount(accountId, rule.amount)
+                accountRepository?.adjustBalance(accountId, -rule.amount)
             }
 
             EngineExecutionResult(success = true, reason = "Expense added successfully")
@@ -282,9 +393,11 @@ class RecurringEngine(
         }
     }
 
-    private suspend fun executeSavings(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
+    private suspend fun executeSavings(rule: RecurringRule): EngineExecutionResult {
+        val savingsRepository = savingsRepository
+            ?: return EngineExecutionResult(success = false, reason = "Savings are not available")
         return try {
-            savingsRepository?.addToSavings(
+            savingsRepository.addToSavings(
                 amount = rule.amount,
                 note = rule.name,
                 category = rule.category ?: "Recurring Savings"
@@ -295,9 +408,11 @@ class RecurringEngine(
         }
     }
 
-    private suspend fun executeSavingsWithdraw(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
+    private suspend fun executeSavingsWithdraw(rule: RecurringRule): EngineExecutionResult {
+        val savingsRepository = savingsRepository
+            ?: return EngineExecutionResult(success = false, reason = "Savings are not available")
         return try {
-            savingsRepository?.withdrawFromSavings(
+            savingsRepository.withdrawFromSavings(
                 amount = rule.amount,
                 note = rule.name,
                 category = rule.category ?: "Recurring Withdrawal"
@@ -308,7 +423,7 @@ class RecurringEngine(
         }
     }
 
-    private suspend fun executeTransfer(rule: RecurringRule, transactionId: Long): EngineExecutionResult {
+    private suspend fun executeTransfer(rule: RecurringRule): EngineExecutionResult {
         return try {
             if (rule.accountId != null && rule.destinationAccountId != null && accountRepository != null) {
                 val transferResult = accountRepository.transferBetweenAccounts(
@@ -335,7 +450,9 @@ class RecurringEngine(
                     date = System.currentTimeMillis(),
                     syncStatus = SyncStatus.LOCAL_ONLY
                 )
-                transactionRepository?.insertTransaction(transaction)
+                val transactionRepository = transactionRepository
+                    ?: return EngineExecutionResult(success = false, reason = "Transfers are not available")
+                transactionRepository.insertTransaction(transaction)
                 EngineExecutionResult(success = true, reason = "Transfer executed successfully")
             }
         } catch (e: Exception) {
@@ -352,22 +469,36 @@ class RecurringEngine(
     suspend fun processDueRules(currentBalance: Double = DEFAULT_MINIMUM_BALANCE): List<EngineExecutionResult> {
         val results = mutableListOf<EngineExecutionResult>()
         val now = System.currentTimeMillis()
-        val allActiveRules = recurringRepository.getRulesDueForExecution(now)
+        var balance = currentBalance
 
-        for (rule in allActiveRules) {
-            if (rule.isActive) {
-                if (rule.frequency == RecurringFrequency.WEEKLY_SPECIFIC_DAYS) {
-                    if (isExecutionDay(rule, now)) {
-                        val result = executeRule(rule, currentBalance)
-                        results.add(result)
-                    }
-                } else {
-                    if (rule.nextExecutionDate <= now) {
-                        val result = executeRule(rule, currentBalance)
-                        results.add(result)
-                    }
+        fun track(result: EngineExecutionResult) {
+            results.add(result)
+            val rule = result.rule
+            if (result.success && !result.awaitingConfirmation && rule != null) {
+                balance += when (rule.transactionType) {
+                    TransactionType.INCOME, TransactionType.SAVINGS_WITHDRAW -> rule.amount
+                    TransactionType.EXPENSE, TransactionType.SAVINGS_ADD -> -rule.amount
+                    else -> 0.0
                 }
             }
+        }
+
+        // Transactions the user confirmed or asked to retry, whose date has arrived
+        recurringRepository.getTransactionsDueForExecution(RecurringTransactionStatus.CONFIRMED, now)
+            .forEach { track(executePendingTransaction(it, balance)) }
+
+        // nextExecutionDate always lands on a selected weekday, so a due rule is executed even if
+        // the worker runs a day late (the old weekday check left such rules stuck for a week)
+        for (rule in recurringRepository.getRulesDueForExecution(now)) {
+            if (!rule.isActive) continue
+            if (rule.endDate != null && rule.nextExecutionDate > rule.endDate) {
+                recurringRepository.updateRuleActiveStatus(rule.id, false)
+                continue
+            }
+            track(
+                if (rule.autoExecute) executeRule(rule, balance, automatic = true)
+                else queueForConfirmation(rule)
+            )
         }
 
         return results
@@ -462,12 +593,13 @@ class RecurringEngine(
                     val intervals = sortedDates.zipWithNext().map { it.second - it.first }
                     val avgInterval = intervals.average()
 
+                    // Long arithmetic: 45 and 120 days in millis overflow Int
                     val frequency = when {
-                        avgInterval < 2 * 24 * 60 * 60 * 1000 -> RecurringFrequency.DAILY
-                        avgInterval < 10 * 24 * 60 * 60 * 1000 -> RecurringFrequency.WEEKLY
-                        avgInterval < 20 * 24 * 60 * 60 * 1000 -> RecurringFrequency.BIWEEKLY
-                        avgInterval < 45 * 24 * 60 * 60 * 1000 -> RecurringFrequency.MONTHLY
-                        avgInterval < 120 * 24 * 60 * 60 * 1000 -> RecurringFrequency.QUARTERLY
+                        avgInterval < 2 * DAY_MS -> RecurringFrequency.DAILY
+                        avgInterval < 10 * DAY_MS -> RecurringFrequency.WEEKLY
+                        avgInterval < 20 * DAY_MS -> RecurringFrequency.BIWEEKLY
+                        avgInterval < 45 * DAY_MS -> RecurringFrequency.MONTHLY
+                        avgInterval < 120 * DAY_MS -> RecurringFrequency.QUARTERLY
                         else -> RecurringFrequency.YEARLY
                     }
 
@@ -488,16 +620,14 @@ class RecurringEngine(
     }
 
     private fun mapCategory(category: String?): ExpenseCategory {
-        return when (category?.uppercase()) {
-            "MEAL", "FOOD & DINING" -> ExpenseCategory.MEAL
-            "TRANSPORT", "TRANSPORTATION" -> ExpenseCategory.TRANSPORT
-            "ENTERTAINMENT" -> ExpenseCategory.ENTERTAINMENT
-            "BILLS", "BILLS & UTILITIES" -> ExpenseCategory.BILLS
-            "SHOPPING" -> ExpenseCategory.SHOPPING
-            "HEALTHCARE" -> ExpenseCategory.OTHER
-            "EDUCATION" -> ExpenseCategory.OTHER
-            "TRAVEL" -> ExpenseCategory.TRANSPORT
-            "SUBSCRIPTIONS" -> ExpenseCategory.BILLS
+        val normalized = category?.trim().orEmpty()
+        ExpenseCategory.entries.firstOrNull {
+            it.name.equals(normalized, ignoreCase = true) || it.displayName.equals(normalized, ignoreCase = true)
+        }?.let { return it }
+        return when (normalized.uppercase()) {
+            "FOOD", "DINING", "GROCERIES" -> ExpenseCategory.MEAL
+            "HOUSING", "RENT", "UTILITIES" -> ExpenseCategory.BILLS
+            "HEALTH", "MEDICAL" -> ExpenseCategory.HEALTHCARE
             else -> ExpenseCategory.OTHER
         }
     }
@@ -508,6 +638,9 @@ data class EngineExecutionResult(
     val reason: String? = null,
     val shouldReschedule: Boolean = false,
     val shouldSkip: Boolean = false,
+    /** True when the rule needs manual confirmation and a PENDING transaction was queued instead. */
+    val awaitingConfirmation: Boolean = false,
+    val rule: RecurringRule? = null,
     val relatedIncomeId: Long? = null,
     val relatedExpenseId: Long? = null,
     val relatedFinancialTransactionId: Int? = null

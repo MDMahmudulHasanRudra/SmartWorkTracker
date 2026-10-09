@@ -13,6 +13,10 @@ import com.rudra.smartworktracker.model.DecisionType
 import com.rudra.smartworktracker.model.UserHistory
 import com.rudra.smartworktracker.model.WeeklyReport
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Calendar
 
 class BehaviorEngineRepository(
@@ -36,6 +40,15 @@ class BehaviorEngineRepository(
     
     suspend fun deleteDecision(id: String) = decisionDao.deleteDecisionById(id)
 
+    /** Deletes a decision and takes back its effect on debt and lifetime totals. */
+    suspend fun deleteDecision(decision: Decision) {
+        decisionDao.deleteDecisionById(decision.id)
+        val category = decision.category
+        consequenceDebtDao.insertDebtIfAbsent(ConsequenceDebt(id = category.name, category = category, debtAmount = 0f))
+        consequenceDebtDao.addToDebt(category.name, -debtImpactOf(decision), System.currentTimeMillis())
+        userHistoryDao.removeDecision(if (decision.isPositive) 1 else 0, if (decision.isPositive) 0 else 1)
+    }
+
     // Check-in operations
     fun getTodayCheckIn(type: String): Flow<DailyCheckIn?> {
         val calendar = Calendar.getInstance()
@@ -56,30 +69,24 @@ class BehaviorEngineRepository(
     fun getTotalDebt(): Flow<Float?> = consequenceDebtDao.getTotalDebt()
     
     private suspend fun updateDebt(decision: Decision) {
-        val category = decision.decisionType.category
-        val impact = if (decision.isPositive) {
-            -decision.decisionType.defaultImpact // Negative debt = good
-        } else {
-            decision.decisionType.defaultImpact // Positive debt = bad
-        }
-        
-        // Check if debt exists for this category
-        val existingDebt = ConsequenceDebt(
-            id = category.name,
-            category = category,
-            debtAmount = 0f
+        // Uses the decision's own category so custom decisions land where the user put them
+        val category = decision.category
+        consequenceDebtDao.insertDebtIfAbsent(
+            ConsequenceDebt(id = category.name, category = category, debtAmount = 0f)
         )
-        consequenceDebtDao.insertDebt(existingDebt)
-        consequenceDebtDao.addToDebt(category.name, impact, System.currentTimeMillis())
+        consequenceDebtDao.addToDebt(category.name, debtImpactOf(decision), System.currentTimeMillis())
+    }
+
+    /** Positive debt = bad, negative debt = surplus. Custom decisions (no preset impact) weigh 5. */
+    private fun debtImpactOf(decision: Decision): Float {
+        val magnitude = kotlin.math.abs(decision.decisionType.defaultImpact).takeIf { it > 0f } ?: CUSTOM_IMPACT
+        return if (decision.isPositive) -magnitude else magnitude
     }
 
     suspend fun reduceDebt(category: DecisionCategory, amount: Float) {
-        val existingDebt = ConsequenceDebt(
-            id = category.name,
-            category = category,
-            debtAmount = 0f
+        consequenceDebtDao.insertDebtIfAbsent(
+            ConsequenceDebt(id = category.name, category = category, debtAmount = 0f)
         )
-        consequenceDebtDao.insertDebt(existingDebt)
         consequenceDebtDao.addToDebt(category.name, -amount, System.currentTimeMillis()) // Negative = reduces debt
     }
 
@@ -87,16 +94,23 @@ class BehaviorEngineRepository(
     fun getUserHistory(): Flow<UserHistory?> = userHistoryDao.getUserHistory()
     
     private suspend fun updateUserHistory(decision: Decision) {
-        val history = UserHistory()
-        userHistoryDao.insertHistory(history)
-        
+        userHistoryDao.insertHistoryIfAbsent(UserHistory())
+
         val positive = if (decision.isPositive) 1 else 0
         val negative = if (decision.isPositive) 0 else 1
         userHistoryDao.addDecision(positive, negative)
+
+        // Count each calendar day with at least one decision (was never incremented before)
+        val history = userHistoryDao.getUserHistory().first() ?: return
+        val zone = ZoneId.systemDefault()
+        val lastActiveDay = Instant.ofEpochMilli(history.lastActiveDate).atZone(zone).toLocalDate()
+        if (history.totalDaysActive == 0 || lastActiveDay != LocalDate.now(zone)) {
+            userHistoryDao.incrementDaysActive(System.currentTimeMillis())
+        }
     }
 
     suspend fun initUserHistory() {
-        userHistoryDao.insertHistory(UserHistory())
+        userHistoryDao.insertHistoryIfAbsent(UserHistory())
     }
 
     // Weekly Report operations
@@ -115,9 +129,9 @@ class BehaviorEngineRepository(
         val positive = decisions.count { it.isPositive }
         val negative = decisions.count { !it.isPositive }
         
-        val categoryCounts = decisions.groupBy { it.decisionType.category }
-        val worstCategory = categoryCounts.maxByOrNull { it.value.size }?.key
-        val bestCategory = categoryCounts.minByOrNull { it.value.size }?.key
+        // Worst area = most negative decisions, best area = most positive ones
+        val worstCategory = decisions.filter { !it.isPositive }.groupBy { it.category }.maxByOrNull { it.value.size }?.key
+        val bestCategory = decisions.filter { it.isPositive }.groupBy { it.category }.maxByOrNull { it.value.size }?.key
         
         val worstType = decisions
             .filter { !it.isPositive }
@@ -138,7 +152,10 @@ class BehaviorEngineRepository(
             else -> "Mixed week. Focus on consistency."
         }
         
+        // Regenerating in the same week replaces that week's report instead of adding another
+        val existingId = weeklyReportDao.getReportForWeekOnce(weekStart)?.id
         val report = WeeklyReport(
+            id = existingId ?: java.util.UUID.randomUUID().toString(),
             weekStartDate = weekStart,
             weekEndDate = weekEnd,
             totalDecisions = decisions.size,
@@ -197,5 +214,9 @@ class BehaviorEngineRepository(
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
         return calendar.timeInMillis
+    }
+
+    private companion object {
+        const val CUSTOM_IMPACT = 5f
     }
 }

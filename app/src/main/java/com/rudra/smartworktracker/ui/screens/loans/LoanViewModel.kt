@@ -46,8 +46,11 @@ enum class LoanTab(val title: String) {
     ALL("All"),
     BORROWED("Borrowed"),
     LENT("Lent"),
-    OVERDUE("Overdue")
+    OVERDUE("Overdue"),
+    SETTLED("Settled")
 }
+
+private val Loan.isOpen: Boolean get() = isActive && !isFullyPaid
 
 class LoanViewModel(private val loanRepository: LoanRepository) : ViewModel() {
 
@@ -62,7 +65,7 @@ class LoanViewModel(private val loanRepository: LoanRepository) : ViewModel() {
     private fun loadLoans() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            loanRepository.getActiveLoans()
+            loanRepository.getAllLoans()
                 .catch { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -105,10 +108,11 @@ class LoanViewModel(private val loanRepository: LoanRepository) : ViewModel() {
 
     private fun filterLoans(loans: List<Loan>, tab: LoanTab, query: String): List<Loan> {
         var filtered = when (tab) {
-            LoanTab.ALL -> loans
-            LoanTab.BORROWED -> loans.filter { it.loanType == LoanType.BORROWED }
-            LoanTab.LENT -> loans.filter { it.loanType == LoanType.LENT }
-            LoanTab.OVERDUE -> loans.filter { it.isOverdue }
+            LoanTab.ALL -> loans.filter { it.isOpen }
+            LoanTab.BORROWED -> loans.filter { it.isOpen && it.loanType == LoanType.BORROWED }
+            LoanTab.LENT -> loans.filter { it.isOpen && it.loanType == LoanType.LENT }
+            LoanTab.OVERDUE -> loans.filter { it.isOpen && it.isOverdue }
+            LoanTab.SETTLED -> loans.filter { !it.isOpen }
         }
 
         if (query.isNotBlank()) {
@@ -177,6 +181,23 @@ class LoanViewModel(private val loanRepository: LoanRepository) : ViewModel() {
             loanRepository.updateLoan(loan)
             closeEditLoanDialog()
         }
+    }
+
+    /**
+     * Applies an edited principal: the outstanding balance moves by the same difference, so
+     * repayments already made are preserved.
+     */
+    fun updateLoan(original: Loan, edited: Loan, newAmount: Double) {
+        val delta = newAmount - original.initialAmount
+        val remaining = (original.remainingAmount + delta).coerceAtLeast(0.0)
+        updateLoan(
+            edited.copy(
+                initialAmount = newAmount,
+                remainingAmount = remaining,
+                isFullyPaid = remaining <= 0.0,
+                isActive = remaining > 0.0
+            )
+        )
     }
 
     fun deleteLoan(loan: Loan) {

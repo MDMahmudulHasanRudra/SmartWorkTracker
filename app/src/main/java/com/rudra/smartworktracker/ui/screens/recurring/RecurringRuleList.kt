@@ -87,6 +87,7 @@ import com.rudra.smartworktracker.ui.components.EmptyStateCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -430,7 +431,7 @@ fun RuleCard(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                     Text(
-                        text = "$${String.format("%.2f", rule.amount)}",
+                        text = "${CurrencyManager.format(rule.amount)}",
                         style = MaterialTheme.typography.titleMedium,
                         color = if (rule.transactionType == TransactionType.INCOME) Color(0xFF4CAF50) else Color(0xFFFF5252),
                         fontWeight = FontWeight.Bold
@@ -496,7 +497,7 @@ fun RuleCard(
                     DetailRow("Source", accountName ?: rule.sourceAccount.name)
                     DetailRow("Auto Execute", if (rule.autoExecute) "Yes" else "No")
                     if (rule.minimumBalanceRequired != null) {
-                        DetailRow("Min Balance", "$${String.format("%.2f", rule.minimumBalanceRequired)}")
+                        DetailRow("Min Balance", "${CurrencyManager.format(rule.minimumBalanceRequired)}")
                     }
                     DetailRow("Created", dateFormat.format(Date(rule.createdAt)))
                 }
@@ -718,7 +719,7 @@ fun TransactionItem(
             }
 
             Text(
-                text = "$${String.format("%.2f", transaction.amount)}",
+                text = "${CurrencyManager.format(transaction.amount)}",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = if (transaction.transactionType == TransactionType.INCOME) Color(0xFF4CAF50) else Color(0xFFFF5252)
@@ -962,7 +963,7 @@ fun CalendarTransactionItem(transaction: RecurringTransaction) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "$${String.format("%.2f", transaction.amount)}",
+                    text = "${CurrencyManager.format(transaction.amount)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (transaction.transactionType == TransactionType.INCOME) Color(0xFF4CAF50) else Color(0xFFFF5252),
                     fontSize = 11.sp

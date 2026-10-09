@@ -1,6 +1,7 @@
 package com.rudra.smartworktracker.data.dao
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -15,6 +16,10 @@ interface CreditCardDao {
 
     @Update
     suspend fun updateCard(creditCard: CreditCard)
+
+    // Card transactions are removed by the ForeignKey CASCADE
+    @Delete
+    suspend fun deleteCard(creditCard: CreditCard)
 
     @Query("SELECT * FROM credit_cards ORDER BY cardName ASC")
     fun getAllCards(): Flow<List<CreditCard>>

@@ -30,20 +30,23 @@ object CsvExporter {
             incomes.forEach { income ->
                 writer.write(
                     "INCOME,${dateFormat.format(Date(income.timestamp))},${income.amount}," +
-                    "\"${income.category}\",\"${income.description}\",\"${income.source}\"\n"
+                    "${csv(income.category)},${csv(income.description)},${csv(income.source)}\n"
                 )
             }
 
             expenses.forEach { expense ->
                 writer.write(
                     "EXPENSE,${dateFormat.format(Date(expense.timestamp))},${expense.amount}," +
-                    "\"${expense.category.displayName}\",\"${expense.notes ?: ""}\",\"${expense.merchant ?: ""}\"\n"
+                    "${csv(expense.category.displayName)},${csv(expense.notes)},${csv(expense.merchant)}\n"
                 )
             }
         }
 
         return file
     }
+
+    /** Quotes a field and doubles embedded quotes so commas/quotes in notes don't break columns. */
+    private fun csv(value: String?): String = "\"" + (value ?: "").replace("\"", "\"\"") + "\""
 
     fun shareFile(context: Context, file: File) {
         val uri = FileProvider.getUriForFile(

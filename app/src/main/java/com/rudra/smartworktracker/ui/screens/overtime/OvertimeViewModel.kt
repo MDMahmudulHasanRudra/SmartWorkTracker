@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
+import com.rudra.smartworktracker.data.repository.SettingsRepository
 import com.rudra.smartworktracker.data.repository.WorkLogRepository
 import com.rudra.smartworktracker.model.WorkLog
 import com.rudra.smartworktracker.model.WorkType
@@ -25,6 +26,10 @@ class OvertimeViewModel(application: Application) : AndroidViewModel(application
 
     val monthlySummary: Flow<OvertimeSummary> = monthlyOvertimeLogs.map { logs -> calculateSummary(logs) }
     val yearlySummary: Flow<OvertimeSummary> = yearlyOvertimeLogs.map { logs -> calculateSummary(logs) }
+
+    /** Overtime rate from Settings, used to pre-fill new entries. */
+    val defaultOvertimeRate: StateFlow<Double> = SettingsRepository(application).overtimeRate
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
@@ -80,18 +85,9 @@ class OvertimeViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun calculateDuration(startTime: String?, endTime: String?): Double {
-        if (startTime == null || endTime == null) return 0.0
-        val startMillis = DateTimeUtils.parseTime(startTime)
-        var endMillis = DateTimeUtils.parseTime(endTime)
-        
-        // Handle cross-midnight (e.g., 22:00 to 02:00)
-        if (endMillis < startMillis) {
-            endMillis += 24 * 60 * 60 * 1000 // Add 24 hours
-        }
-        
-        return (endMillis - startMillis).toDouble() / (1000 * 60 * 60)
-    }
+    // Handles cross-midnight shifts (e.g. 22:00 to 02:00)
+    fun calculateDuration(startTime: String?, endTime: String?): Double =
+        DateTimeUtils.hoursBetween(startTime, endTime)
 
     private fun calculateSummary(logs: List<WorkLog>): OvertimeSummary {
         var totalHours = 0.0

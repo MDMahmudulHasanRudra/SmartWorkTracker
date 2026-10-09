@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rudra.smartworktracker.model.WorkLog
 import java.text.SimpleDateFormat
 import java.util.*
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +55,14 @@ fun OvertimeScreen(viewModel: OvertimeViewModel = viewModel()) {
 
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
+
+    val defaultRate by viewModel.defaultOvertimeRate.collectAsState()
+    // Pre-fill the rate from Settings so entries don't silently earn 0
+    LaunchedEffect(showAddSheet, defaultRate) {
+        if (showAddSheet && overtimeRate.isBlank() && defaultRate > 0) {
+            overtimeRate = String.format(Locale.US, "%.2f", defaultRate).trimEnd('0').trimEnd('.')
+        }
+    }
 
     val monthlyLogs by viewModel.monthlyOvertimeLogs.collectAsState()
     val yearlyLogs by viewModel.yearlyOvertimeLogs.collectAsState()
@@ -78,7 +87,7 @@ fun OvertimeScreen(viewModel: OvertimeViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFF8F9FA))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp)
         ) {
             OvertimeHeader()
@@ -103,7 +112,7 @@ fun OvertimeScreen(viewModel: OvertimeViewModel = viewModel()) {
             ModalBottomSheet(
                 onDismissRequest = { showAddSheet = false },
                 sheetState = sheetState,
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
             ) {
                 AddOvertimeContent(
@@ -132,19 +141,24 @@ fun OvertimeScreen(viewModel: OvertimeViewModel = viewModel()) {
             }
         }
 
-        if (showDatePicker) {
-            val calendar = Calendar.getInstance()
+        // Shown from an effect: calling show() during composition stacked a new dialog on every
+        // recomposition, and cancelling left showDatePicker stuck at true
+        LaunchedEffect(showDatePicker) {
+            if (!showDatePicker) return@LaunchedEffect
+            val calendar = Calendar.getInstance().apply { time = selectedDate ?: Date() }
             DatePickerDialog(
                 context,
                 { _, year, month, dayOfMonth ->
                     calendar.set(year, month, dayOfMonth)
                     selectedDate = calendar.time
-                    showDatePicker = false
                 },
                 calendar.get(Calendar.YEAR),
                 calendar.get(Calendar.MONTH),
                 calendar.get(Calendar.DAY_OF_MONTH)
-            ).show()
+            ).apply {
+                datePicker.maxDate = System.currentTimeMillis()
+                setOnDismissListener { showDatePicker = false }
+            }.show()
         }
 
         if (showStartTimePicker) {
@@ -225,7 +239,7 @@ private fun OvertimeSummaryView(monthlySummary: OvertimeSummary, yearlySummary: 
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(Modifier.padding(16.dp)) {
             SummaryColumn("This Month ($monthName)", monthlySummary, Modifier.weight(1f))
@@ -238,10 +252,10 @@ private fun OvertimeSummaryView(monthlySummary: OvertimeSummary, yearlySummary: 
 @Composable
 private fun SummaryColumn(title: String, summary: OvertimeSummary, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
         Text("${String.format("%.2f", summary.totalHours)}h", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Text("৳${String.format("%.2f", summary.totalEarnings)}", color = Color(0xFF00C853), fontWeight = FontWeight.SemiBold)
+        Text("${CurrencyManager.format(summary.totalEarnings)}", color = Color(0xFF00C853), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -253,12 +267,12 @@ private fun AddOvertimeContent(
 ) {
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = Color(0xFFFF6B6B),
-        unfocusedBorderColor = Color(0xFFE2E8F0),
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
         focusedLabelColor = Color(0xFFFF6B6B),
-        unfocusedLabelColor = Color(0xFF718096),
-        disabledBorderColor = Color(0xFFE2E8F0),
-        disabledLabelColor = Color(0xFF718096),
-        disabledTextColor = Color.Black
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        disabledTextColor = MaterialTheme.colorScheme.onSurface
     )
 
     Column(
@@ -374,7 +388,7 @@ private fun OvertimeLogItem(log: WorkLog, viewModel: OvertimeViewModel, onDelete
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -382,10 +396,10 @@ private fun OvertimeLogItem(log: WorkLog, viewModel: OvertimeViewModel, onDelete
                 Text("${log.startTime} - ${log.endTime}", style = MaterialTheme.typography.bodyMedium)
                 val duration = viewModel.calculateDuration(log.startTime, log.endTime)
                 val earnings = duration * (log.overtimeRate ?: 0.0)
-                Text("Hours: ${String.format("%.2f", duration)}h, Earned: ৳${String.format("%.2f", earnings)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text("Hours: ${String.format("%.2f", duration)}h, Earned: ${CurrencyManager.format(earnings)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, "Delete Log", tint = Color.Gray.copy(alpha = 0.6f))
+                Icon(Icons.Default.Delete, "Delete Log", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -393,7 +407,7 @@ private fun OvertimeLogItem(log: WorkLog, viewModel: OvertimeViewModel, onDelete
 
 @Composable
 fun VerticalDivider(modifier: Modifier = Modifier) {
-    Box(modifier.width(1.dp).fillMaxHeight().background(color = Color.LightGray.copy(alpha = 0.5f)))
+    Box(modifier.width(1.dp).fillMaxHeight().background(color = MaterialTheme.colorScheme.outlineVariant))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -458,9 +458,6 @@ fun SessionHistoryItem(session: SessionItem) {
                             SessionType.WORK -> Icons.Default.Work
                             SessionType.BREAK -> Icons.Default.Coffee
                             SessionType.LUNCH -> Icons.Default.Restaurant
-                            SessionType.WORK -> Icons.Default.Computer
-                            SessionType.BREAK -> Icons.Default.AccessAlarm
-                            SessionType.LUNCH -> Icons.Default.AddTask
                         },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,

@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.RecurringTransaction
 import com.rudra.smartworktracker.data.entity.RecurringTransactionStatus
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +19,9 @@ interface RecurringTransactionDao {
     
     @Update
     suspend fun updateTransaction(transaction: RecurringTransaction)
+
+    @Upsert
+    suspend fun upsertTransaction(transaction: RecurringTransaction)
     
     @Delete
     suspend fun deleteTransaction(transaction: RecurringTransaction)
@@ -76,6 +80,7 @@ interface RecurringTransactionDao {
     @Query("SELECT * FROM recurring_transactions WHERE relatedIncomeId = :incomeId OR relatedExpenseId = :expenseId OR relatedFinancialTransactionId = :transactionId")
     suspend fun getTransactionByRelatedIds(incomeId: Long?, expenseId: Long?, transactionId: Int?): RecurringTransaction?
     
-    @Query("UPDATE recurring_transactions SET scheduledDate = :newScheduledDate, status = 'PENDING', updatedAt = :updatedAt WHERE id = :transactionId")
+    // CONFIRMED (not PENDING) so the retry is picked up by RecurringEngine.processDueRules once due
+    @Query("UPDATE recurring_transactions SET scheduledDate = :newScheduledDate, status = 'CONFIRMED', isConfirmed = 1, updatedAt = :updatedAt WHERE id = :transactionId")
     suspend fun snoozeTransaction(transactionId: Long, newScheduledDate: Long, updatedAt: Long = System.currentTimeMillis())
 }

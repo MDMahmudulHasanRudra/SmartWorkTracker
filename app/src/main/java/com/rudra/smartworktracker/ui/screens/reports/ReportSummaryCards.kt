@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.model.ExpenseCategory
 import com.rudra.smartworktracker.model.WorkType
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun SummaryCard(
@@ -146,7 +147,7 @@ fun BarChart(income: Double, expense: Double) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "\u09F3${income.toInt()}",
+                        "${CurrencyManager.formatWhole(income)}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold
@@ -169,7 +170,7 @@ fun BarChart(income: Double, expense: Double) {
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "\u09F3${expense.toInt()}",
+                        "${CurrencyManager.formatWhole(expense)}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold

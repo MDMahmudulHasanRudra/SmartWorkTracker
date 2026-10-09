@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,12 +40,16 @@ fun AccountDetailScreen(
     var showAddMoneyDialog by remember { mutableStateOf(false) }
     var showCashOutDialog by remember { mutableStateOf(false) }
     var showSendDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val showResult: (String) -> Unit = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
 
     LaunchedEffect(accountId) {
         viewModel.loadAccountDetails(accountId)
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(uiState.account?.nickname ?: uiState.account?.name ?: "Account") },
@@ -64,6 +69,15 @@ fun AccountDetailScreen(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
+            }
+        } else if (uiState.account == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(uiState.error ?: "Account not found", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             uiState.account?.let { account ->
@@ -113,7 +127,8 @@ fun AccountDetailScreen(
                 onDismiss = { showAddMoneyDialog = false },
                 onConfirm = { amount ->
                     viewModel.addMoneyToAccount(account.id, amount) { success, message ->
-                        showAddMoneyDialog = false
+                        if (success) showAddMoneyDialog = false
+                        showResult(message)
                     }
                 }
             )
@@ -127,7 +142,8 @@ fun AccountDetailScreen(
                 onDismiss = { showCashOutDialog = false },
                 onConfirm = { amount ->
                     viewModel.cashOutFromAccount(account.id, amount) { success, message ->
-                        showCashOutDialog = false
+                        if (success) showCashOutDialog = false
+                        showResult(message)
                     }
                 }
             )

@@ -11,6 +11,11 @@ import com.rudra.smartworktracker.data.repository.SettingsRepository
 import com.rudra.smartworktracker.model.WorkType
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.rudra.smartworktracker.utils.CsvExporter
+import com.rudra.smartworktracker.utils.CurrencyManager
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -75,11 +80,12 @@ class CalculationViewModel(
 
                     fetchWorkLogData(mealRate, currentTravelExp, _uiState.value.selectedDate)
                     fetchMonthlyBreakdown(mealRate, currentTravelExp)
+                    // collectLatest never completes, so loading must end per emission (not in finally)
+                    _uiState.update { it.copy(isLoading = false) }
                 }
             } catch (e: Exception) {
-                _errorMessage.emit("Failed to load data: ${e.message}")
-            } finally {
                 _uiState.update { it.copy(isLoading = false) }
+                _errorMessage.emit("Failed to load data: ${e.message}")
             }
         }
     }
@@ -285,8 +291,35 @@ class CalculationViewModel(
         return Calendar.getInstance().get(Calendar.YEAR)
     }
 
+    /** Writes the month summary and yearly breakdown to a CSV (opens in Excel/Sheets) and shares it. */
     fun exportToExcel(context: Context) {
-        // Placeholder for export functionality
-        Toast.makeText(context, "Exporting to Excel...", Toast.LENGTH_SHORT).show()
+        viewModelScope.launch {
+            try {
+                val state = _uiState.value
+                val monthLabel = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(state.selectedDate)
+                val file = withContext(Dispatchers.IO) {
+                    val csv = buildString {
+                        appendLine("Work cost summary,$monthLabel")
+                        appendLine("Currency,${CurrencyManager.getCurrencyCode()}")
+                        appendLine()
+                        appendLine("Item,Per week,Per month,Per year")
+                        appendLine("Meals,${state.mealCostPerWeek},${state.mealCostPerMonth},${state.mealCostPerYear}")
+                        appendLine("Travel,${state.travelCostPerWeek},${state.travelCostPerMonth},${state.travelCostPerYear}")
+                        appendLine("Other,,${state.otherExpensePerMonth},${state.otherExpensePerYear}")
+                        appendLine("Total,,${state.totalExpensePerMonth},${state.totalExpensePerYear}")
+                        appendLine()
+                        appendLine("Office days,${state.officeDays}")
+                        appendLine("Home office days,${state.homeOfficeDays}")
+                        appendLine()
+                        appendLine("Month,Estimated cost (${getCurrentYear()})")
+                        state.monthlyBreakdown.forEach { (month, cost) -> appendLine("$month,$cost") }
+                    }
+                    File(context.cacheDir, "work_costs_${System.currentTimeMillis()}.csv").apply { writeText(csv) }
+                }
+                CsvExporter.shareFile(context, file)
+            } catch (e: Exception) {
+                _errorMessage.emit("Export failed: ${e.message}")
+            }
+        }
     }
 }

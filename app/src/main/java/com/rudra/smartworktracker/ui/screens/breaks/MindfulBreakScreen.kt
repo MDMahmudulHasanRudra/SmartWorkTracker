@@ -43,6 +43,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import android.widget.Toast
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.rudra.smartworktracker.data.AppDatabase
+import com.rudra.smartworktracker.data.repository.HealthRepository
+import kotlinx.coroutines.launch
 
 @Composable
 fun MindfulBreakScreen(
@@ -53,6 +63,22 @@ fun MindfulBreakScreen(
     var instruction by remember { mutableStateOf("Breathe In") }
     var cycleCount by remember { mutableIntStateOf(1) }
     var isRunning by remember { mutableStateOf(true) }
+    val startedAt = remember { System.currentTimeMillis() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Records the session in Health (a break plus meditation minutes), then leaves
+    fun finishSession() {
+        val minutes = ((System.currentTimeMillis() - startedAt) / 60_000.0).coerceAtLeast(1.0)
+        val appContext = context.applicationContext
+        scope.launch {
+            val repository = HealthRepository(AppDatabase.getDatabase(appContext).healthMetricDao())
+            repository.logBreak("Mindful break")
+            repository.logMeditation(kotlin.math.round(minutes), "Guided breathing ($cycleCount cycles)")
+            Toast.makeText(appContext, "Mindful break logged", Toast.LENGTH_SHORT).show()
+            onNavigateBack()
+        }
+    }
 
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(
@@ -158,15 +184,25 @@ fun MindfulBreakScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Pause/Resume button
-            FilledTonalButton(onClick = { isRunning = !isRunning }) {
-                Icon(
-                    if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isRunning) "Pause" else "Resume",
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.padding(4.dp))
-                Text(if (isRunning) "Pause" else "Resume")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Pause/Resume button
+                FilledTonalButton(onClick = { isRunning = !isRunning }) {
+                    Icon(
+                        if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isRunning) "Pause" else "Resume",
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Text(if (isRunning) "Pause" else "Resume")
+                }
+                Button(
+                    onClick = { finishSession() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF764ba2))
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Text("Finish")
+                }
             }
         }
     }

@@ -35,6 +35,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun TodayExpenseBreakdown(expenses: List<Expense>) {
@@ -143,7 +144,7 @@ private fun ExpenseRow(expense: Expense) {
         }
 
         Text(
-            text = "\u09F3${"%.0f".format(expense.amount)}",
+            text = "${CurrencyManager.formatWhole(expense.amount)}",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface

@@ -14,6 +14,9 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE isActive = 1 ORDER BY createdAt DESC")
     suspend fun getAllAccountsList(): List<Account>
 
+    @Query("SELECT * FROM accounts ORDER BY createdAt DESC")
+    suspend fun getAllAccountsIncludingInactive(): List<Account>
+
     @Query("SELECT * FROM accounts WHERE id = :accountId")
     suspend fun getAccountById(accountId: Long): Account?
 
@@ -32,7 +35,7 @@ interface AccountDao {
     @Query("SELECT SUM(balance) FROM accounts WHERE type = :category AND isActive = 1")
     fun getTotalBalanceByCategory(category: AccountCategory): Flow<Double?>
 
-    @Query("SELECT SUM(balance) FROM accounts WHERE isActive = 1 AND date(lastUpdated/1000, 'unixepoch') = date('now')")
+    @Query("SELECT SUM(balance) FROM accounts WHERE isActive = 1 AND date(lastUpdated/1000, 'unixepoch', 'localtime') = date('now', 'localtime')")
     fun getTodayTransferredAmount(): Flow<Double?>
 
     @Query("SELECT * FROM accounts WHERE linkedGoalId = :goalId AND isActive = 1")

@@ -82,7 +82,8 @@ fun DashboardScreen(
                     heroColor = heroColor,
                     onColorPickerClick = { showColorPicker = true },
                     selectedAccountId = selectedAccountId,
-                    onAccountSelected = { viewModel.setSelectedAccountId(it) }
+                    onAccountSelected = { viewModel.setSelectedAccountId(it) },
+                    workStreak = uiState.workStreak
                 )
             }
 

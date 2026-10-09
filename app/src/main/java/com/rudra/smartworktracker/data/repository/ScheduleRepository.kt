@@ -10,8 +10,8 @@ class ScheduleRepository(private val scheduleDao: ScheduleDao) {
         return scheduleDao.getAllSchedules()
     }
 
-    suspend fun insertSchedule(schedule: Schedule) {
-        scheduleDao.insertSchedule(schedule)
+    suspend fun insertSchedule(schedule: Schedule): Long {
+        return scheduleDao.insertSchedule(schedule)
     }
 
     suspend fun updateSchedule(schedule: Schedule) {

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.BillSplit
 import kotlinx.coroutines.flow.Flow
 
@@ -23,4 +24,7 @@ interface BillSplitDao {
 
     @Query("DELETE FROM bill_splits WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Upsert
+    suspend fun upsert(billSplit: BillSplit)
 }

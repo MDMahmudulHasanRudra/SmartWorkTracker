@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 private val PresetColors = listOf(
     Color(0xFFFFFFFF) to "Default",
@@ -153,7 +154,7 @@ fun HeroColorPickerSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "\u09F3",
+                        text = CurrencyManager.symbol(),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -287,7 +288,7 @@ private fun ColorSwatch(
             if (color == Color.White && !isSelected) {
                 Text(
                     text = "W",
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )

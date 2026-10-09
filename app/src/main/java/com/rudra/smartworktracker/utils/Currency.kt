@@ -1,16 +1,17 @@
 package com.rudra.smartworktracker.utils
 
-import java.text.NumberFormat
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.util.Currency
 import java.util.Locale
 
 object CurrencyManager {
-    private var currentCurrency: String = "BDT"
-    private var currentLocale: Locale = Locale.US
+    // Compose state, so every amount on screen re-renders when the currency is changed in Settings
+    private var currentCurrency: String by mutableStateOf("BDT")
 
     fun init(currencyCode: String) {
         currentCurrency = currencyCode
-        currentLocale = Locale.US
     }
 
     fun setCurrency(currencyCode: String) {
@@ -19,30 +20,37 @@ object CurrencyManager {
 
     fun getCurrencyCode(): String = currentCurrency
 
-    fun format(amount: Double): String {
-        val formatter = NumberFormat.getCurrencyInstance(currentLocale)
-        return try {
-            formatter.currency = Currency.getInstance(currentCurrency)
-            formatter.format(amount)
-        } catch (e: Exception) {
-            String.format("%s %.2f", currentCurrency, amount)
-        }
-    }
+    /** "৳1,234.50" / "-৳1,234.50" using the selected currency's symbol. */
+    fun format(amount: Double): String = formatWithPattern(amount, "%,.2f")
+
+    /** Same as [format] without decimals: "৳1,235". */
+    fun formatWhole(amount: Double): String = formatWithPattern(amount, "%,.0f")
 
     fun formatCompact(amount: Double): String {
+        // Thresholds on the magnitude so large negative amounts are abbreviated too
+        val sign = if (amount < 0) "-" else ""
+        val abs = kotlin.math.abs(amount)
+        val symbol = symbol()
         return when {
-            amount >= 1_000_000 -> String.format("%s %.1fM", currentCurrency, amount / 1_000_000)
-            amount >= 1_000 -> String.format("%s %.1fK", currentCurrency, amount / 1_000)
-            else -> String.format("%s %.2f", currentCurrency, amount)
+            abs >= 1_000_000 -> String.format(Locale.US, "%s%s%.1fM", sign, symbol, abs / 1_000_000)
+            abs >= 1_000 -> String.format(Locale.US, "%s%s%.1fK", sign, symbol, abs / 1_000)
+            else -> String.format(Locale.US, "%s%s%.0f", sign, symbol, abs)
         }
     }
 
     fun symbol(): String {
+        // Java often renders unfamiliar currencies as their code (e.g. "BDT"), so prefer our table
+        SUPPORTED_CURRENCIES.firstOrNull { it.code == currentCurrency }?.let { return it.symbol }
         return try {
             Currency.getInstance(currentCurrency).symbol
         } catch (e: Exception) {
             currentCurrency
         }
+    }
+
+    private fun formatWithPattern(amount: Double, pattern: String): String {
+        val sign = if (amount < 0) "-" else ""
+        return sign + symbol() + String.format(Locale.US, pattern, kotlin.math.abs(amount))
     }
 }
 

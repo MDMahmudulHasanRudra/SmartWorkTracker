@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.RecurringRule
 import com.rudra.smartworktracker.data.entity.RecurringFrequency
 import com.rudra.smartworktracker.data.entity.RecurringPriority
@@ -20,6 +21,9 @@ interface RecurringRuleDao {
     
     @Update
     suspend fun updateRule(rule: RecurringRule)
+
+    @Upsert
+    suspend fun upsertRule(rule: RecurringRule)
     
     @Delete
     suspend fun deleteRule(rule: RecurringRule)
@@ -66,6 +70,6 @@ interface RecurringRuleDao {
     @Query("SELECT SUM(amount) FROM recurring_rules WHERE transactionType = :type AND isActive = 1 AND isDeleted = 0")
     fun getTotalAmountByType(type: TransactionType): Flow<Double?>
     
-    @Query("SELECT * FROM recurring_rules WHERE isDeleted = 0 AND name LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM recurring_rules WHERE isDeleted = 0 AND (name LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%')")
     fun searchRules(query: String): Flow<List<RecurringRule>>
 }

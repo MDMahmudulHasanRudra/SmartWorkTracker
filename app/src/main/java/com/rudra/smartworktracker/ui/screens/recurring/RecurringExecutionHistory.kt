@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun HistoryTab(viewModel: RecurringViewModel) {
@@ -106,7 +107,7 @@ fun HistoryTab(viewModel: RecurringViewModel) {
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Total: $${String.format("%.2f", execution.totalAmount)}",
+                            text = "Total: ${CurrencyManager.format(execution.totalAmount)}",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

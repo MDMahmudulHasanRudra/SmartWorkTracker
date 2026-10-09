@@ -118,7 +118,7 @@ fun MoodCardLarge(
                     }
                 }
             } else {
-                Text("Tap to track your mood", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text("Tap to track your mood", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Track how you feel", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9800))
@@ -153,7 +153,7 @@ fun StressCardLarge(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(avgStress?.let { "$it/10" } ?: "--", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = stressColor)
-            Text("Average this week", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text("Average this week", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             Text("Tap to log stress level", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9800))
         }
@@ -181,7 +181,7 @@ fun MeditationCard(
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Meditation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Today's: ${totalMinutes.toInt()} minutes", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text("Today's: ${totalMinutes.toInt()} minutes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFFE91E63))
         }
@@ -278,7 +278,7 @@ fun StressInputDialog(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text("$stressLevel", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.ExtraBold, color = stressColor)
-                Text("/10", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                Text("/10", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 Spacer(modifier = Modifier.height(16.dp))
 

@@ -6,7 +6,7 @@
     -->
 
     <!-- Include the Room database files -->
-    <include domain="database" path="smart_work_tracker_database"/>
+    <include domain="database" path="smart_work_tracker_v2"/>
 
     <!-- Include shared preferences -->
     <include domain="sharedpref" path="smart_work_tracker_prefs.xml"/>

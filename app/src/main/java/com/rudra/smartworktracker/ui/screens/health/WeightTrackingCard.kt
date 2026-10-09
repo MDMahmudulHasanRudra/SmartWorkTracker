@@ -98,8 +98,8 @@ fun TrendChartCard(title: String, data: List<Pair<LocalDate, Double>>, color: Co
             } else {
                 Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Analytics, null, tint = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.size(48.dp))
-                        Text("Not enough data to plot trend", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        Icon(Icons.Default.Analytics, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
+                        Text("Not enough data to plot trend", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

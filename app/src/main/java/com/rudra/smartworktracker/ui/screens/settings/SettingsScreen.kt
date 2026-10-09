@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,8 +26,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.rudra.smartworktracker.data.repository.ThemeMode
+import com.rudra.smartworktracker.utils.BiometricHelper
 import com.rudra.smartworktracker.utils.CurrencyManager
 import com.rudra.smartworktracker.utils.SUPPORTED_CURRENCIES
+import com.rudra.smartworktracker.utils.findFragmentActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -52,7 +56,7 @@ fun SettingsScreen(navController: NavController) {
     var newDailyWorkHours by remember(dailyWorkHours) { mutableStateOf(dailyWorkHours.toString()) }
     val workingDaysPerWeek by viewModel.workingDaysPerWeek.collectAsState()
     var newWorkingDaysPerWeek by remember(workingDaysPerWeek) { mutableStateOf(workingDaysPerWeek.toString()) }
-    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
     val autoBackupEnabled by viewModel.autoBackupEnabled.collectAsState()
@@ -79,6 +83,42 @@ fun SettingsScreen(navController: NavController) {
     }
 
     LaunchedEffect(Unit) {
+        viewModel.resetDone.collect {
+            Toast.makeText(context, "All data has been reset", Toast.LENGTH_SHORT).show()
+            // Restart so every screen drops its cached state and onboarding runs again
+            context.findFragmentActivity()?.recreate()
+        }
+    }
+
+    val appVersion = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "-"
+    }
+
+    fun openLink(url: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            Toast.makeText(context, "No app found to open the link", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Turning the lock on (or off) requires passing it once, so nobody locks themselves out. */
+    fun toggleAppLock(enable: Boolean) {
+        val activity = context.findFragmentActivity()
+        if (activity == null || !BiometricHelper.isBiometricAvailable(context)) {
+            Toast.makeText(context, "Set up a fingerprint, face or screen lock on this device first", Toast.LENGTH_LONG).show()
+            return
+        }
+        BiometricHelper.authenticate(
+            activity = activity,
+            title = if (enable) "Turn on app lock" else "Turn off app lock",
+            subtitle = "Confirm it's you",
+            onSuccess = { viewModel.setBiometric(enable) },
+            onError = { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        )
+    }
+
+    LaunchedEffect(Unit) {
         viewModel.restoreResult.collect { result ->
             result.onSuccess {
                 Toast.makeText(context, "Data restored successfully", Toast.LENGTH_SHORT).show()
@@ -100,7 +140,7 @@ fun SettingsScreen(navController: NavController) {
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -121,12 +161,28 @@ fun SettingsScreen(navController: NavController) {
             // Appearance Section
             item {
                 SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                    SettingsSwitchItem(
-                        icon = Icons.Default.DarkMode,
-                        title = "Dark Theme",
-                        subtitle = "Switch between light and dark mode",
-                        isChecked = isDarkTheme,
-                        onCheckedChange = { viewModel.setDarkTheme(it) }
+                    Text(
+                        "Theme",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        modes.forEachIndexed { index, (mode, label) ->
+                            SegmentedButton(
+                                selected = themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) },
+                                shape = SegmentedButtonDefaults.itemShape(index, modes.size)
+                            ) { Text(label) }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsItem(
+                        icon = Icons.Default.ColorLens,
+                        title = "Colors & text size",
+                        subtitle = "Accent color, dynamic color and font size",
+                        onClick = { navController.navigate("appearance") }
                     )
                 }
             }
@@ -136,10 +192,10 @@ fun SettingsScreen(navController: NavController) {
                 SettingsSection(title = "Security", icon = Icons.Default.Lock) {
                     SettingsSwitchItem(
                         icon = Icons.Default.Fingerprint,
-                        title = "Biometric Lock",
-                        subtitle = "Require fingerprint/face to open app",
+                        title = "App Lock",
+                        subtitle = "Ask for fingerprint, face or screen lock when opening the app",
                         isChecked = biometricEnabled,
-                        onCheckedChange = { viewModel.setBiometric(it) }
+                        onCheckedChange = { toggleAppLock(it) }
                     )
                 }
             }
@@ -150,14 +206,14 @@ fun SettingsScreen(navController: NavController) {
                     SettingsSwitchItem(
                         icon = Icons.Default.NotificationsActive,
                         title = "Enable Notifications",
-                        subtitle = "Receive app notifications",
+                        subtitle = "Recurring transaction reminders and results",
                         isChecked = notificationsEnabled,
                         onCheckedChange = { viewModel.setNotifications(it) }
                     )
                     SettingsSwitchItem(
                         icon = Icons.Default.Vibration,
                         title = "Enable Vibration",
-                        subtitle = "Vibrate on notifications",
+                        subtitle = "Vibrate for reminder notifications",
                         isChecked = vibrationEnabled,
                         onCheckedChange = { viewModel.setVibration(it) }
                     )
@@ -178,25 +234,25 @@ fun SettingsScreen(navController: NavController) {
                     SettingsItem(
                         icon = Icons.Default.Restaurant,
                         title = "Meal Rate",
-                        subtitle = "Current: ${CurrencyManager.format(mealRate).removePrefix(CurrencyManager.symbol())} per meal",
+                        subtitle = "${CurrencyManager.format(mealRate)} per meal",
                         onClick = { showMealRateDialog = true }
                     )
                     SettingsItem(
                         icon = Icons.Default.AttachMoney,
                         title = "Overtime Rate",
-                        subtitle = "Current: ${CurrencyManager.format(overtimeRate).removePrefix(CurrencyManager.symbol())} per hour",
+                        subtitle = "${CurrencyManager.format(overtimeRate)} per hour",
                         onClick = { showOvertimeRateDialog = true }
                     )
                     SettingsItem(
                         icon = Icons.Default.AccessTime,
                         title = "Daily Work Hours",
-                        subtitle = "Current: $dailyWorkHours hours",
+                        subtitle = "${formatHours(dailyWorkHours)} hours per day",
                         onClick = { showDailyWorkHoursDialog = true }
                     )
                     SettingsItem(
                         icon = Icons.Default.CalendarMonth,
                         title = "Working Days / Week",
-                        subtitle = "Current: $workingDaysPerWeek days",
+                        subtitle = "$workingDaysPerWeek days per week",
                         onClick = { showWorkingDaysPerWeekDialog = true }
                     )
                 }
@@ -208,7 +264,7 @@ fun SettingsScreen(navController: NavController) {
                     SettingsSwitchItem(
                         icon = Icons.Default.CloudUpload,
                         title = "Auto Backup",
-                        subtitle = "Automatically backup your data",
+                        subtitle = "Save a daily backup to Downloads",
                         isChecked = autoBackupEnabled,
                         onCheckedChange = { viewModel.setAutoBackup(it) }
                     )
@@ -287,19 +343,13 @@ fun SettingsScreen(navController: NavController) {
                         icon = Icons.Default.Shield,
                         title = "Privacy Policy",
                         subtitle = "View our privacy policy",
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://rudra2001-coder.github.io/my/"))
-                            context.startActivity(intent)
-                        }
+                        onClick = { openLink("https://rudra2001-coder.github.io/my/") }
                     )
                     SettingsItem(
                         icon = Icons.Default.Description,
                         title = "Terms of Service",
                         subtitle = "View terms and conditions",
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://rudra2001-coder.github.io/my/"))
-                            context.startActivity(intent)
-                        }
+                        onClick = { openLink("https://rudra2001-coder.github.io/my/") }
                     )
                     SettingsItem(
                         icon = Icons.Default.Email,
@@ -307,7 +357,7 @@ fun SettingsScreen(navController: NavController) {
                         subtitle = "Get help and support",
                         onClick = {
                             val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:mhrudra064@gmail.com\n")
+                                data = Uri.parse("mailto:mhrudra064@gmail.com")
                                 putExtra(Intent.EXTRA_SUBJECT, "Smart Work Tracker Support")
                             }
                             try {
@@ -326,8 +376,7 @@ fun SettingsScreen(navController: NavController) {
                             try {
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
-                                context.startActivity(webIntent)
+                                openLink("https://play.google.com/store/apps/details?id=${context.packageName}")
                             }
                         }
                     )
@@ -358,7 +407,7 @@ fun SettingsScreen(navController: NavController) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Version 1.0.0",
+                            "Version $appVersion",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
@@ -762,10 +811,16 @@ fun SettingsScreen(navController: NavController) {
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("• All journal entries")
-                    Text("• Financial records")
-                    Text("• User preferences")
-                    Text("• App settings")
+                    Text("• Work logs, schedules and alarms")
+                    Text("• Income, expenses, accounts, loans and savings")
+                    Text("• Habits, journals, goals and health data")
+                    Text("• Your profile and every setting")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Tip: create a backup first if you might want this data again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "This action cannot be undone!",
@@ -780,7 +835,6 @@ fun SettingsScreen(navController: NavController) {
                     onClick = {
                         viewModel.clearAllData()
                         showResetDialog = false
-                        Toast.makeText(context, "All data has been reset", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
@@ -803,6 +857,9 @@ fun SettingsScreen(navController: NavController) {
         )
     }
 }
+
+private fun formatHours(hours: Double): String =
+    if (hours % 1.0 == 0.0) hours.toInt().toString() else hours.toString()
 
 @Composable
 fun SettingsSection(

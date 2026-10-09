@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -107,6 +106,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.MoreTime
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.style.TextOverflow
+import com.rudra.smartworktracker.ui.screens.appearance.AppearanceScreen
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -160,9 +167,112 @@ import com.rudra.smartworktracker.ui.screens.accounts.AccountDetailScreen
 import com.rudra.smartworktracker.ui.theme.SmartWorkTrackerTheme
 import kotlinx.coroutines.launch
 
+/** Drawer sections in display order (a state map would not keep this order). */
+private val drawerSections: List<Pair<String, List<NavigationItem>>> = listOf(
+    "Core" to listOf(
+        NavigationItem.Dashboard,
+        NavigationItem.AddEntry,
+        NavigationItem.Reports,
+        NavigationItem.Journal,
+        NavigationItem.WorkTimer,
+        NavigationItem.Focus
+    ),
+    "Finance" to listOf(
+        NavigationItem.Expense,
+        NavigationItem.Income,
+        NavigationItem.Accounts,
+        NavigationItem.Transfer,
+        NavigationItem.Savings,
+        NavigationItem.Loans,
+        NavigationItem.EMI,
+        NavigationItem.CreditCard,
+        NavigationItem.FinancialStatement,
+        NavigationItem.Calculation,
+        NavigationItem.BillSplit,
+        NavigationItem.SpendAdvisor
+    ),
+    "Productivity" to listOf(
+        NavigationItem.Calendar,
+        NavigationItem.Analytics,
+        NavigationItem.MonthlyReport,
+        NavigationItem.Recurring,
+        NavigationItem.Scheduler,
+        NavigationItem.Overtime,
+        NavigationItem.Team
+    ),
+    "Wellness" to listOf(
+        NavigationItem.Health,
+        NavigationItem.Habit,
+        NavigationItem.Achievements,
+        NavigationItem.MindfulBreak,
+        NavigationItem.Wisdom,
+        NavigationItem.RealityTracker,
+        NavigationItem.FutureImpact
+    ),
+    "System" to listOf(
+        NavigationItem.Settings,
+        NavigationItem.Appearance,
+        NavigationItem.Backup,
+        NavigationItem.UserProfile,
+        NavigationItem.AllFunsion
+    )
+)
+
+/** Every destination, used to resolve the app bar title for the current route. */
+private val allNavigationItems: List<NavigationItem> =
+    drawerSections.flatMap { it.second } + listOf(NavigationItem.AccountDetail, NavigationItem.ProfileSetup)
+
+/**
+ * Screens that render their own TopAppBar. The shell hides its global bar on these so the
+ * user doesn't get two stacked app bars; the drawer stays reachable with an edge swipe.
+ */
+private val routesWithOwnTopBar: Set<String> = setOf(
+    NavigationItem.Accounts.route,
+    NavigationItem.AccountDetail.route,
+    NavigationItem.Analytics.route,
+    NavigationItem.Backup.route,
+    NavigationItem.Achievements.route,
+    NavigationItem.Transfer.route,
+    NavigationItem.BillSplit.route,
+    NavigationItem.Loans.route,
+    NavigationItem.WorkTimer.route,
+    NavigationItem.Appearance.route,
+    NavigationItem.AllFunsion.route,
+    NavigationItem.CreditCard.route,
+    NavigationItem.EMI.route,
+    NavigationItem.AddEntry.route,
+    NavigationItem.Calendar.route,
+    NavigationItem.Team.route,
+    NavigationItem.Calculation.route,
+    NavigationItem.Journal.route,
+    NavigationItem.Habit.route,
+    NavigationItem.SpendAdvisor.route,
+    NavigationItem.Reports.route,
+    NavigationItem.ProfileSetup.route,
+    NavigationItem.RealityTracker.route,
+    NavigationItem.UserProfile.route,
+    NavigationItem.Settings.route,
+    NavigationItem.MonthlyReport.route,
+    NavigationItem.Scheduler.route,
+    NavigationItem.Savings.route
+)
+
+/** "add_entry?workLogId={workLogId}" / "account_detail/{accountId}" -> base route. */
+private fun baseRoute(route: String?): String? = route?.substringBefore('?')?.substringBefore('/')
+
+private fun NavHostController.navigateToTopLevel(route: String) {
+    navigate(route) {
+        popUpTo(graph.startDestinationId) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainApp() {
+fun MainApp(deepLinkRoute: String? = null) {
     val context = LocalContext.current
     val sharedPreferences = remember { context.getSharedPreferences("main_prefs", Context.MODE_PRIVATE) }
     val isOnboardingCompleted = remember { sharedPreferences.getBoolean("onboarding_completed", false) }
@@ -173,111 +283,36 @@ fun MainApp() {
     val scope = rememberCoroutineScope()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-    val shouldShowBars = currentRoute != NavigationItem.Onboarding.route
+    val currentRoute = baseRoute(navBackStackEntry?.destination?.route)
+    val isOnboarding = currentRoute == NavigationItem.Onboarding.route
+    val showGlobalTopBar = !isOnboarding && currentRoute !in routesWithOwnTopBar
 
-    val navigationItems = listOf(
-        NavigationItem.Dashboard,
-        NavigationItem.AddEntry,
-        NavigationItem.Reports,
-        NavigationItem.Journal,
-        NavigationItem.WorkTimer,
-        NavigationItem.Focus,
-        NavigationItem.MindfulBreak,
-        NavigationItem.Habit,
-        NavigationItem.Health,
-        NavigationItem.Achievements,
-        NavigationItem.Calendar,
-        NavigationItem.Analytics,
-        NavigationItem.MonthlyReport,
-        NavigationItem.Calculation,
-        NavigationItem.FinancialStatement,
-        NavigationItem.Expense,
-        NavigationItem.Income,
-        NavigationItem.Savings,
-        NavigationItem.Loans,
-        NavigationItem.EMI,
-        NavigationItem.CreditCard,
-        NavigationItem.Transfer,
-        NavigationItem.Accounts,
-        NavigationItem.Recurring,
-        NavigationItem.Backup,
-        NavigationItem.Settings,
-        NavigationItem.Team,
-        NavigationItem.Overtime,
-        NavigationItem.Scheduler,
-        NavigationItem.UserProfile,
-        NavigationItem.RealityTracker,
-        NavigationItem.FutureImpact,
-        NavigationItem.SpendAdvisor
+    // Notification deep links (e.g. recurring transactions) open their screen once the graph exists
+    LaunchedEffect(deepLinkRoute) {
+        if (isOnboardingCompleted && deepLinkRoute != null &&
+            allNavigationItems.any { it.route == deepLinkRoute }
+        ) {
+            navController.navigate(deepLinkRoute) { launchSingleTop = true }
+        }
+    }
 
-    )
+    val expandedSections = remember {
+        mutableStateMapOf(
+            "Core" to true,
+            "Finance" to true,
+            "Productivity" to true,
+            "Wellness" to true,
+            "System" to false
+        )
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !isOnboarding,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.width(300.dp)
             ) {
-                val sections = remember {
-                    mutableStateMapOf(
-                        "Core" to true,
-                        "Finance" to true,
-                        "Productivity" to true,
-                        "Wellness" to true,
-                        "System" to false
-                    )
-                }
-
-                val sectionItems = mapOf(
-                    "Core" to listOf(
-                        NavigationItem.Dashboard,
-                        NavigationItem.AddEntry,
-                        NavigationItem.Reports,
-                        NavigationItem.Journal,
-                        NavigationItem.WorkTimer,
-                        NavigationItem.Focus
-                    ),
-                    "Finance" to listOf(
-                        NavigationItem.Expense,
-                        NavigationItem.Income,
-                        NavigationItem.Accounts,
-                        NavigationItem.Transfer,
-                        NavigationItem.Savings,
-                        NavigationItem.Loans,
-                        NavigationItem.EMI,
-                        NavigationItem.CreditCard,
-                        NavigationItem.FinancialStatement,
-                        NavigationItem.Calculation,
-                        NavigationItem.BillSplit,
-                        NavigationItem.SpendAdvisor
-                    ),
-                    "Productivity" to listOf(
-                        NavigationItem.Calendar,
-                        NavigationItem.Analytics,
-                        NavigationItem.MonthlyReport,
-                        NavigationItem.Recurring,
-                        NavigationItem.Scheduler,
-                        NavigationItem.Overtime,
-                        NavigationItem.Team
-                    ),
-                    "Wellness" to listOf(
-                        NavigationItem.Health,
-                        NavigationItem.Habit,
-                        NavigationItem.Achievements,
-                        NavigationItem.MindfulBreak,
-                        NavigationItem.Wisdom,
-                        NavigationItem.RealityTracker,
-                        NavigationItem.FutureImpact
-                    ),
-                    "System" to listOf(
-                        NavigationItem.Settings,
-                        NavigationItem.Backup,
-                        NavigationItem.UserProfile,
-                        NavigationItem.AllFunsion
-                    )
-                )
-
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -288,6 +323,7 @@ fun MainApp() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                                .statusBarsPadding()
                                 .padding(horizontal = 24.dp, vertical = 20.dp)
                         ) {
                             Row(
@@ -327,14 +363,14 @@ fun MainApp() {
                         HorizontalDivider()
                     }
 
-                    sections.forEach { (sectionTitle, _) ->
-                        val expanded = sections[sectionTitle] ?: true
+                    drawerSections.forEach { (sectionTitle, items) ->
+                        val expanded = expandedSections[sectionTitle] ?: true
 
                         item(key = "header_$sectionTitle") {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { sections[sectionTitle] = !expanded }
+                                    .clickable { expandedSections[sectionTitle] = !expanded }
                                     .padding(horizontal = 20.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -358,8 +394,8 @@ fun MainApp() {
 
                         if (expanded) {
                             itemsIndexed(
-                                items = sectionItems[sectionTitle] ?: emptyList(),
-                                key = { _, item -> item.route }
+                                items = items,
+                                key = { _, item -> "${sectionTitle}_${item.route}" }
                             ) { _, item ->
                                 val isSelected = item.route == currentRoute
                                 val bgColor by animateColorAsState(
@@ -377,13 +413,7 @@ fun MainApp() {
                                         .padding(horizontal = 12.dp, vertical = 1.dp)
                                         .clip(RoundedCornerShape(12.dp))
                                         .clickable {
-                                            navController.navigate(item.route) {
-                                                popUpTo(navController.graph.startDestinationId) {
-                                                    saveState = true
-                                                }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
+                                            navController.navigateToTopLevel(item.route)
                                             scope.launch { drawerState.close() }
                                         },
                                     color = bgColor
@@ -395,7 +425,7 @@ fun MainApp() {
                                     ) {
                                         Icon(
                                             imageVector = item.icon,
-                                            contentDescription = item.title,
+                                            contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                             tint = if (isSelected)
                                                 MaterialTheme.colorScheme.primary
@@ -416,7 +446,9 @@ fun MainApp() {
                                                 Text(
                                                     text = desc,
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
@@ -449,11 +481,12 @@ fun MainApp() {
         }
     ) {
         Scaffold(
+            // Insets are handled by the bars and by each screen's own TopAppBar
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                if (shouldShowBars) {
-                    val currentTitle = remember(currentRoute) {
-                        navigationItems.find { it.route == currentRoute }?.title ?: "Smart Work Tracker"
-                    }
+                if (showGlobalTopBar) {
+                    val currentTitle = allNavigationItems.find { it.route == currentRoute }?.title
+                        ?: "Smart Work Tracker"
                     TopAppBar(
                         title = {
                             Text(
@@ -479,20 +512,21 @@ fun MainApp() {
                 }
             },
             bottomBar = {
-                if (shouldShowBars) {
+                if (!isOnboarding) {
                     AppBottomNavigation(
                         navController = navController,
-                        onAddEntry = { navController.navigate(NavigationItem.AddEntry.route) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-            },
-            floatingActionButton = {}
+            }
         ) { paddingValues ->
             NavHost(
                 navController = navController,
                 startDestination = startDestination,
-                modifier = Modifier.padding(paddingValues)
+                modifier = Modifier
+                    .padding(paddingValues)
+                    // Screens with their own Scaffold must not re-apply insets the shell already covers
+                    .consumeWindowInsets(paddingValues)
             ) {
                 composable(NavigationItem.Onboarding.route) {
                     OnboardingScreen(
@@ -656,7 +690,7 @@ fun MainApp() {
                     popEnterTransition = { defaultPopEnterTransition() },
                     popExitTransition = { defaultPopExitTransition() }
                 ) {
-                    MindfulBreakScreen()
+                    MindfulBreakScreen(onNavigateBack = { navController.popBackStack() })
                 }
 
                 composable(
@@ -788,7 +822,7 @@ popExitTransition = { defaultPopExitTransition() }
                 ) {
                     AccountsScreen(
                         onNavigateToTransfer = { navController.navigate(NavigationItem.Transfer.route) },
-                        onNavigateToAddAccount = { },
+
                         onNavigateToAccountDetail = { accountId ->
                             navController.navigate("${NavigationItem.AccountDetail.route}/$accountId")
                         }
@@ -805,7 +839,8 @@ popExitTransition = { defaultPopExitTransition() }
                     val accountId = backStackEntry.arguments?.getLong("accountId") ?: 0L
                     AccountDetailScreen(
                         accountId = accountId,
-                        onNavigateBack = { navController.popBackStack() }
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToTransfer = { navController.navigate(NavigationItem.Transfer.route) }
                     )
                 }
                  composable(
@@ -872,7 +907,7 @@ popExitTransition = { defaultPopExitTransition() }
                     popEnterTransition = { defaultPopEnterTransition() },
                     popExitTransition = { defaultPopExitTransition() }
                 ) {
-                    RealityTrackerScreen()
+                    RealityTrackerScreen(onNavigateBack = { navController.popBackStack() })
                 }
                 composable(
                     route = NavigationItem.FutureImpact.route,
@@ -895,10 +930,19 @@ popExitTransition = { defaultPopExitTransition() }
                 composable(NavigationItem.UserProfile.route) {
                     ProfileScreen(
                         onNavigateBack = { navController.popBackStack() },
-                        onNavigateToSetup = { navController.navigate("profile_setup") }
+                        onNavigateToSetup = { navController.navigate(NavigationItem.ProfileSetup.route) }
                     )
                 }
-                composable("profile_setup") {
+                composable(
+                    route = NavigationItem.Appearance.route,
+                    enterTransition = { defaultEnterTransition() },
+                    exitTransition = { defaultExitTransition() },
+                    popEnterTransition = { defaultPopEnterTransition() },
+                    popExitTransition = { defaultPopExitTransition() }
+                ) {
+                    AppearanceScreen(onNavigateBack = { navController.popBackStack() })
+                }
+                composable(NavigationItem.ProfileSetup.route) {
                     ProfileSetupScreen(
                         onProfileSaved = { navController.popBackStack() },
                         onNavigateBack = { navController.popBackStack() }
@@ -933,23 +977,28 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.defaultPopExitTran
         animationSpec = tween(400)
     )
 
+private val bottomItems = listOf(
+    NavigationItem.Dashboard,
+    NavigationItem.Calendar,
+    NavigationItem.Analytics,
+    NavigationItem.AllFunsion,
+    NavigationItem.Settings
+)
+
+/** Short labels that fit the five equal-width bottom bar slots. */
+private fun NavigationItem.bottomLabel(): String = when (this) {
+    NavigationItem.Dashboard -> "Home"
+    NavigationItem.AllFunsion -> "Features"
+    else -> title
+}
+
 @Composable
 fun AppBottomNavigation(
     navController: NavHostController,
-    onAddEntry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val bottomItems = listOf(
-        NavigationItem.Dashboard,
-        NavigationItem.Calendar,
-        NavigationItem.Analytics,
-        NavigationItem.AllFunsion,
-        NavigationItem.Settings
-    )
-
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-    val selectedIndex = bottomItems.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val currentRoute = baseRoute(navBackStackEntry?.destination?.route)
 
     Surface(
         modifier = modifier,
@@ -957,58 +1006,24 @@ fun AppBottomNavigation(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         color = MaterialTheme.colorScheme.surface
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Sliding indicator pill
-            val indicatorWidth = 56.dp
-            val itemSpacing = 72.dp
-            val indicatorOffset by animateDpAsState(
-                targetValue = (selectedIndex * itemSpacing.value).dp,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                ),
-                label = "indicatorOffset"
-            )
-
-            Box(
-                modifier = Modifier
-                    .offset(x = indicatorOffset + 16.dp)
-                    .width(indicatorWidth)
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-            )
-
-            // Nav items row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                bottomItems.forEach { item ->
-                    val isSelected = currentRoute == item.route
-
-                    BottomNavItem(
-                        item = item,
-                        isSelected = isSelected,
-                        onClick = {
-                            if (currentRoute != item.route) {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        }
-                    )
-                }
+            bottomItems.forEach { item ->
+                // Nothing is highlighted on screens that aren't bottom-bar destinations
+                val isSelected = currentRoute == item.route
+                BottomNavItem(
+                    item = item,
+                    isSelected = isSelected,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        if (!isSelected) navController.navigateToTopLevel(item.route)
+                    }
+                )
             }
         }
     }
@@ -1018,17 +1033,9 @@ fun AppBottomNavigation(
 private fun BottomNavItem(
     item: NavigationItem,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val animatedIconSize by animateDpAsState(
-        targetValue = if (isSelected) 26.dp else 22.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "iconSize"
-    )
-
     val animatedColor by animateColorAsState(
         targetValue = if (isSelected)
             MaterialTheme.colorScheme.primary
@@ -1037,42 +1044,56 @@ private fun BottomNavItem(
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "iconColor"
     )
-
-    val animatedFontWeight = animateFloatAsState(
-        targetValue = if (isSelected) FontWeight.Bold.weight.toFloat() else FontWeight.Medium.weight.toFloat(),
+    val pillColor by animateColorAsState(
+        targetValue = if (isSelected)
+            MaterialTheme.colorScheme.primaryContainer
+        else
+            Color.Transparent,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "fontWeight"
+        label = "pillColor"
+    )
+    val pillWidth by animateDpAsState(
+        targetValue = if (isSelected) 56.dp else 32.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "pillWidth"
     )
 
-    Box(
-        modifier = Modifier
-            .width(64.dp)
+    Column(
+        modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
-        contentAlignment = Alignment.Center
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Box(
+            modifier = Modifier
+                .width(pillWidth)
+                .height(30.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(pillColor),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = item.icon,
-                contentDescription = item.title,
-                modifier = Modifier.size(animatedIconSize),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
                 tint = animatedColor
             )
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight(animatedFontWeight.value.toInt()),
-                    fontSize = if (isSelected) 11.sp else 10.sp,
-                    letterSpacing = 0.2.sp
-                ),
-                color = animatedColor,
-                maxLines = 1
-            )
         }
+        Text(
+            text = item.bottomLabel(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                letterSpacing = 0.2.sp
+            ),
+            color = animatedColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1283,9 +1304,9 @@ sealed class NavigationItem(
         description = "Manage your teams"
     )
     object Overtime : NavigationItem(
-        route = "Over Time",
+        route = "overtime",
         title = "Overtime",
-        icon = Icons.Default.Group,
+        icon = Icons.Default.MoreTime,
         description = "Over time calculation"
     )
     object Scheduler : NavigationItem(
@@ -1328,6 +1349,19 @@ sealed class NavigationItem(
         title = "Bill Split",
         icon = Icons.Default.Receipt,
         description = "Split bills with others"
+    )
+
+    object Appearance : NavigationItem(
+        route = "appearance",
+        title = "Appearance",
+        icon = Icons.Default.Palette,
+        description = "Theme, colors and text size"
+    )
+
+    object ProfileSetup : NavigationItem(
+        route = "profile_setup",
+        title = "Edit Profile",
+        icon = Icons.Default.Person
     )
 
 

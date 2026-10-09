@@ -40,6 +40,9 @@ interface ConsequenceDebtDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDebt(debt: ConsequenceDebt)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDebtIfAbsent(debt: ConsequenceDebt)
+
     @Update
     suspend fun updateDebt(debt: ConsequenceDebt)
 
@@ -58,6 +61,9 @@ interface WeeklyReportDao {
     @Query("SELECT * FROM weekly_reports WHERE weekStartDate = :weekStart LIMIT 1")
     fun getReportForWeek(weekStart: Long): Flow<WeeklyReport?>
 
+    @Query("SELECT * FROM weekly_reports WHERE weekStartDate = :weekStart LIMIT 1")
+    suspend fun getReportForWeekOnce(weekStart: Long): WeeklyReport?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReport(report: WeeklyReport)
 
@@ -73,6 +79,9 @@ interface UserHistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: UserHistory)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertHistoryIfAbsent(history: UserHistory)
+
     @Update
     suspend fun updateHistory(history: UserHistory)
 
@@ -81,4 +90,7 @@ interface UserHistoryDao {
 
     @Query("UPDATE user_history SET totalDecisions = totalDecisions + 1, totalPositiveDecisions = totalPositiveDecisions + :positive, totalNegativeDecisions = totalNegativeDecisions + :negative WHERE id = 'user_stats'")
     suspend fun addDecision(positive: Int, negative: Int)
+
+    @Query("UPDATE user_history SET totalDecisions = MAX(totalDecisions - 1, 0), totalPositiveDecisions = MAX(totalPositiveDecisions - :positive, 0), totalNegativeDecisions = MAX(totalNegativeDecisions - :negative, 0) WHERE id = 'user_stats'")
+    suspend fun removeDecision(positive: Int, negative: Int)
 }

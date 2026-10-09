@@ -1,11 +1,15 @@
 package com.rudra.smartworktracker.data.repository
 
+import com.rudra.smartworktracker.data.dao.AccountDao
 import com.rudra.smartworktracker.data.dao.ExpenseDao
 import com.rudra.smartworktracker.model.Expense
 import com.rudra.smartworktracker.model.ExpenseByCategory
 import kotlinx.coroutines.flow.Flow
 
-class ExpenseRepository(private val expenseDao: ExpenseDao) {
+class ExpenseRepository(
+    private val expenseDao: ExpenseDao,
+    private val accountDao: AccountDao? = null
+) {
 
     fun getAllExpenses(): Flow<List<Expense>> {
         return expenseDao.getAllExpenses()
@@ -50,10 +54,20 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
 
     suspend fun deleteExpense(expense: Expense) {
         expenseDao.deleteExpense(expense)
+        reverseAccountEffect(expense)
     }
 
     suspend fun deleteExpenseById(expenseId: String) {
+        val expense = expenseDao.getExpenseById(expenseId)
         expenseDao.deleteExpenseById(expenseId)
+        expense?.let { reverseAccountEffect(it) }
+    }
+
+    /** Refunds a deleted expense to the account it was paid from. */
+    private suspend fun reverseAccountEffect(expense: Expense) {
+        val accountId = expense.accountId ?: return
+        val account = accountDao?.getAccountById(accountId) ?: return
+        accountDao.updateBalance(accountId, account.balance + expense.amount)
     }
 
     suspend fun clearAll() {

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.model.ExpenseCategory
 import com.rudra.smartworktracker.ui.components.AnimatedDoubleCounter
 import com.rudra.smartworktracker.ui.components.SectionHeader
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun MonthlyDonutChart(expensesByCategory: Map<ExpenseCategory, Double>) {
@@ -102,7 +103,7 @@ fun MonthlyDonutChart(expensesByCategory: Map<ExpenseCategory, Double>) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             AnimatedDoubleCounter(
                                 targetValue = total,
-                                prefix = "\u09F3",
+                                prefix = CurrencyManager.symbol(),
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 durationMillis = 800

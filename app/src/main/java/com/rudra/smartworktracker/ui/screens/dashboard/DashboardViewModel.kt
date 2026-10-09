@@ -171,15 +171,13 @@ class DashboardViewModel(
                 val dailyExpense = todayExpense
                 val dailySavings = dailyIncome - dailyExpense
 
-                val overtimeHours = workLogs.filter { it.isOvertime }.sumOf { log ->
-                    val start = log.startTime?.let { DateTimeUtils.parseTime(it) } ?: 0L
-                    val end = log.endTime?.let { DateTimeUtils.parseTime(it) } ?: 0L
-                    (end - start).toDouble() / (1000 * 60 * 60)
+                // Overtime for the current month only, matching the other monthly figures
+                val monthOvertimeLogs = workLogs.filter {
+                    it.isOvertime && it.date.time in startTime..endTime
                 }
-
-                val overtimeEarnings = workLogs.filter { it.isOvertime }.sumOf { log ->
-                    val hours = (log.endTime?.let { DateTimeUtils.parseTime(it) } ?: 0L) - (log.startTime?.let { DateTimeUtils.parseTime(it) } ?: 0L)
-                    (hours.toDouble() / (1000 * 60 * 60)) * (log.overtimeRate ?: 0.0)
+                val overtimeHours = monthOvertimeLogs.sumOf { DateTimeUtils.hoursBetween(it.startTime, it.endTime) }
+                val overtimeEarnings = monthOvertimeLogs.sumOf {
+                    DateTimeUtils.hoursBetween(it.startTime, it.endTime) * (it.overtimeRate ?: 0.0)
                 }
 
                 val netSavings = totalIncome - totalExpense
@@ -188,7 +186,8 @@ class DashboardViewModel(
                 val incomesByCategoryMap = incomesByCategory.associate { it.category to it.total }
 
                 DashboardUiState(
-                    userName = userProfile?.name,
+                    userName = userProfile?.name?.takeIf { it.isNotBlank() },
+                    workStreak = calculateWorkStreak(workLogs),
                     todayWorkType = todayWorkLog?.workType,
                     monthlyStats = monthlyStats,
                     recentActivities = recentActivities.map { it.toUiModel() },
@@ -214,36 +213,76 @@ class DashboardViewModel(
                     workLogs = workLogs
                 )
             }.collect { newState ->
-                _uiSate.value = newState
+                // Accounts come from a separate collector; keep them instead of resetting on every emission
+                _uiSate.value = newState.copy(accounts = _uiSate.value.accounts)
             }
         }
     }
 
+    /**
+     * Sets today's work type. Updates today's existing log instead of inserting a new one on
+     * every tap, and only adds the office meal expense when the day first becomes an office day.
+     */
     fun updateTodayWorkType(workType: WorkType) {
         viewModelScope.launch {
-            val today = Date()
-            val workLog = WorkLog(
-                date = today,
+            val now = System.currentTimeMillis()
+            val existing = workLogRepository.getWorkLogForDay(now)
+            if (existing?.workType == workType) return@launch
+
+            val isWorkingDay = workType != WorkType.OFF_DAY
+            val dailyHours = settingsRepository.dailyWorkHours.first()
+            val startTime = existing?.startTime?.takeIf { DateTimeUtils.isValidTime(it) } ?: DEFAULT_START_TIME
+            val endTime = existing?.endTime?.takeIf { DateTimeUtils.isValidTime(it) } ?: endTimeAfter(startTime, dailyHours)
+            val isOvertime = workType == WorkType.OVERTIME
+            val base = existing ?: WorkLog(date = Date(now), workType = workType, startTime = null, endTime = null)
+
+            val workLog = base.copy(
                 workType = workType,
-                startTime = "12:00", // Default start time
-                endTime = "22:00"   // Default end time
+                startTime = if (isWorkingDay) startTime else null,
+                endTime = if (isWorkingDay) endTime else null,
+                isOvertime = isOvertime,
+                overtimeRate = if (isOvertime) settingsRepository.overtimeRate.first() else base.overtimeRate,
+                updatedAt = now
             )
-            workLogRepository.insertWorkLog(workLog)
+            if (existing == null) workLogRepository.insertWorkLog(workLog) else workLogRepository.updateWorkLog(workLog)
 
             if (workType == WorkType.OFFICE) {
                 val mealRate = settingsRepository.mealRate.first()
                 val mealExpense = Expense(
                     amount = mealRate,
                     category = ExpenseCategory.MEAL,
-                    timestamp = today.time,
+                    timestamp = now,
                     currency = CurrencyManager.getCurrencyCode(),
-                    merchant = "Office Canteen", // or appropriate merchant
+                    merchant = "Office Canteen",
                     notes = "Auto-generated meal expense for office day",
                     imageUri = null
                 )
                 expenseRepository.insertExpense(mealExpense)
             }
         }
+    }
+
+    private fun endTimeAfter(start: String, hours: Double): String {
+        val startMinutes = DateTimeUtils.minutesOfDay(start) ?: (9 * 60)
+        val end = (startMinutes + (hours * 60).toInt()).mod(24 * 60)
+        return String.format(Locale.US, "%02d:%02d", end / 60, end % 60)
+    }
+
+    /** Consecutive working days (anything but an off day) ending today, or yesterday when today has no log yet. */
+    private fun calculateWorkStreak(logs: List<WorkLog>): Int {
+        val zone = java.time.ZoneId.systemDefault()
+        val workedDays = logs
+            .filter { it.workType != WorkType.OFF_DAY }
+            .map { java.time.Instant.ofEpochMilli(it.date.time).atZone(zone).toLocalDate() }
+            .toSet()
+        var day = java.time.LocalDate.now(zone)
+        if (day !in workedDays) day = day.minusDays(1)
+        var streak = 0
+        while (day in workedDays) {
+            streak++
+            day = day.minusDays(1)
+        }
+        return streak
     }
 
     private fun WorkLog.toUiModel(): WorkLogUi {
@@ -262,27 +301,12 @@ class DashboardViewModel(
         return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)
     }
 
-    private fun calculateDuration(startTime: String?, endTime: String?): String {
-        if (startTime == null || endTime == null) return "-"
-        return try {
-            val startParts = startTime.split(":")
-            val endParts = endTime.split(":")
-            val startHour = startParts[0].toInt()
-            val startMinute = startParts[1].toInt()
-            val endHour = endParts[0].toInt()
-            val endMinute = endParts[1].toInt()
-
-            val totalMinutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute)
-            val hours = totalMinutes / 60
-            val minutes = totalMinutes % 60
-
-            if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
-        } catch (e: Exception) {
-            "-" // Fallback
-        }
-    }
+    private fun calculateDuration(startTime: String?, endTime: String?): String =
+        DateTimeUtils.formatDuration(startTime, endTime)
 
     companion object {
+        private const val DEFAULT_START_TIME = "09:00"
+
         fun factory(appDatabase: AppDatabase, context: Context): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

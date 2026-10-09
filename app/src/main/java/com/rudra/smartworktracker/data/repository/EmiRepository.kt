@@ -71,12 +71,20 @@ class EmiRepository(
         emiDao.updateEmi(deletedEmi)
     }
 
+    fun getActiveLoans(): Flow<List<Loan>> = loanDao.getActiveLoans()
+
+    /**
+     * Pays the current installment: the row is kept as payment history (isPaid) and, while the
+     * loan still has a balance, the next month's installment is created so the schedule continues.
+     */
     suspend fun payEmi(emi: Emi) {
         val loan = loanDao.getLoanById(emi.loanId).first()
         if (loan == null) return
 
         val paymentDate = System.currentTimeMillis()
-        val newRemainingAmount = (loan.remainingAmount - emi.principalAmount).coerceAtLeast(0.0)
+        // Without a principal split the whole installment reduces the loan
+        val principalPaid = if (emi.principalAmount > 0) emi.principalAmount else emi.amount
+        val newRemainingAmount = (loan.remainingAmount - principalPaid).coerceAtLeast(0.0)
         val isLoanFullyPaid = newRemainingAmount <= 0.0
 
         loanDao.updateLoan(
@@ -92,10 +100,7 @@ class EmiRepository(
         emiDao.markEmiAsPaid(emi.id, paymentDate)
 
         if (!isLoanFullyPaid) {
-            val calendar = Calendar.getInstance()
-            calendar.timeInMillis = emi.nextDueDate
-            calendar.add(Calendar.MONTH, 1)
-            emiDao.updateEmiDueDate(emi.id, calendar.timeInMillis, paymentDate)
+            emiDao.insertEmi(nextInstallment(emi, paymentDate))
         }
 
         val transactionType = if (loan.loanType == LoanType.BORROWED) {
@@ -106,7 +111,7 @@ class EmiRepository(
 
         val transaction = FinancialTransaction(
             type = transactionType,
-            amount = emi.amount,
+            amount = emi.totalPayable,
             source = if (loan.loanType == LoanType.BORROWED) loan.sourceAccount else loan.destinationAccount,
             destination = if (loan.loanType == LoanType.BORROWED) loan.destinationAccount else loan.sourceAccount,
             note = buildString {
@@ -120,12 +125,32 @@ class EmiRepository(
         transactionDao.insertTransaction(transaction)
     }
 
+    /** Skips this month: the row is closed as skipped and the schedule moves to next month. */
     suspend fun skipEmi(emi: Emi) {
+        val now = System.currentTimeMillis()
+        emiDao.updateEmi(emi.copy(isSkipped = true, isActive = false, updatedAt = now))
+        emiDao.insertEmi(nextInstallment(emi, now))
+    }
+
+    private fun nextInstallment(emi: Emi, now: Long): Emi {
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = emi.nextDueDate
         calendar.add(Calendar.MONTH, 1)
-        emiDao.updateEmiDueDate(emi.id, calendar.timeInMillis)
-        emiDao.skipEmi(emi.id)
+        // Keep the configured day of month (e.g. 31st -> 30th/28th -> back to 31st)
+        val maxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        calendar.set(Calendar.DAY_OF_MONTH, emi.dueDateOfMonth.coerceIn(1, maxDay))
+        return emi.copy(
+            id = 0,
+            uuid = null,
+            nextDueDate = calendar.timeInMillis,
+            lastPaymentDate = null,
+            isActive = true,
+            isPaid = false,
+            isSkipped = false,
+            penaltyAmount = 0.0,
+            createdAt = now,
+            updatedAt = now
+        )
     }
 
     suspend fun getEmiWithLoan(emiId: Int): Pair<Emi?, Loan?> {

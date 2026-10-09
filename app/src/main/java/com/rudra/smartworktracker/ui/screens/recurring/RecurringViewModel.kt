@@ -16,6 +16,7 @@ import com.rudra.smartworktracker.data.repository.ExecutionHistoryRepository
 import com.rudra.smartworktracker.data.repository.IncomeRepository
 import com.rudra.smartworktracker.data.repository.RecurringRepository
 import com.rudra.smartworktracker.data.repository.SavingsRepository
+import com.rudra.smartworktracker.data.repository.TransactionRepository
 import com.rudra.smartworktracker.data.repository.AccountRepository
 import com.rudra.smartworktracker.data.entity.Account
 import com.rudra.smartworktracker.engine.RecurringEngine
@@ -60,11 +61,15 @@ class RecurringViewModel(
     private fun loadData() {
         viewModelScope.launch {
             recurringRepository.getAllRules().collect { rules ->
-                _uiState.value = _uiState.value.copy(rules = rules)
+                _uiState.value = _uiState.value.copy(
+                    rules = rules,
+                    yearlyProjection = recurringEngine.calculateYearlyProjection(rules)
+                )
                 updateActiveRulesCount(rules)
                 calculateMonthlyTotals(rules)
                 calculateCategoryBreakdown(rules)
                 checkSpendingAlerts(rules)
+                filterRules()
             }
         }
 
@@ -91,10 +96,6 @@ class RecurringViewModel(
             recurringRepository.getTransactionsBetweenDates(now, thirtyDaysLater).collect { transactions ->
                 _uiState.value = _uiState.value.copy(upcomingTransactions = transactions)
             }
-        }
-
-        viewModelScope.launch {
-            loadYearlyProjection()
         }
 
         viewModelScope.launch {
@@ -180,12 +181,6 @@ class RecurringViewModel(
         )
     }
 
-    private suspend fun loadYearlyProjection() {
-        val rules = recurringRepository.getActiveRules().first()
-        val projection = recurringEngine.calculateYearlyProjection(rules)
-        _uiState.value = _uiState.value.copy(yearlyProjection = projection)
-    }
-
     private suspend fun loadPatternSuggestions() {
         val suggestions = recurringEngine.detectPatterns()
         _uiState.value = _uiState.value.copy(patternSuggestions = suggestions)
@@ -220,6 +215,7 @@ class RecurringViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true)
             val currentBalance = calculateCurrentBalance()
             val result = recurringEngine.executeRule(rule, currentBalance)
+            recordHistory(rule, result.success, result.reason)
             _uiState.value = _uiState.value.copy(isLoading = false)
             if (!result.success) {
                 _uiState.value = _uiState.value.copy(lastExecutionError = result.reason)
@@ -227,11 +223,27 @@ class RecurringViewModel(
         }
     }
 
+    private suspend fun recordHistory(rule: RecurringRule, success: Boolean, reason: String?) {
+        executionHistoryRepository?.insert(
+            ExecutionHistoryEntity(
+                ruleId = rule.id,
+                ruleName = rule.name,
+                transactionType = rule.transactionType.name,
+                amount = rule.amount,
+                success = success,
+                failureReason = if (!success) reason else null
+            )
+        )
+    }
+
     fun checkAndExecuteDueRules() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             val currentBalance = calculateCurrentBalance()
             val results = recurringEngine.processDueRules(currentBalance)
+            results.filter { !it.awaitingConfirmation }.forEach { result ->
+                result.rule?.let { recordHistory(it, result.success, result.reason) }
+            }
             _uiState.value = _uiState.value.copy(isLoading = false)
 
             val failedCount = results.count { !it.success }
@@ -272,7 +284,9 @@ class RecurringViewModel(
     fun refreshData() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isRefreshing = true)
-            loadData()
+            // Rules, transactions and accounts are live Flows; only the one-shot analysis needs a reload
+            loadPatternSuggestions()
+            filterRules()
             _uiState.value = _uiState.value.copy(isRefreshing = false)
         }
     }
@@ -302,17 +316,7 @@ class RecurringViewModel(
                     failedRules[rule.name] = result.reason ?: "Unknown error"
                 }
 
-                // Persist to database
-                executionHistoryRepository?.insert(
-                    ExecutionHistoryEntity(
-                        ruleId = rule.id,
-                        ruleName = rule.name,
-                        transactionType = rule.transactionType.name,
-                        amount = rule.amount,
-                        success = result.success,
-                        failureReason = if (!result.success) result.reason else null
-                    )
-                )
+                recordHistory(rule, result.success, result.reason)
             }
             val totalAmount = totalIncome + totalExpenses
 
@@ -389,27 +393,34 @@ class RecurringViewModel(
 
     // Transaction confirmation
     fun confirmTransaction(transaction: RecurringTransaction) {
-        viewModelScope.launch {
-            recurringRepository.updateTransaction(
-                transaction.copy(isConfirmed = true, status = RecurringTransactionStatus.CONFIRMED)
-            )
-        }
+        viewModelScope.launch { confirmAndExecute(transaction) }
     }
 
     fun confirmAllPending() {
         viewModelScope.launch {
-            _uiState.value.pendingConfirmations.forEach { transaction ->
-                recurringRepository.updateTransaction(
-                    transaction.copy(isConfirmed = true, status = RecurringTransactionStatus.CONFIRMED)
-                )
+            _uiState.value.pendingConfirmations.forEach { confirmAndExecute(it) }
+        }
+    }
+
+    private suspend fun confirmAndExecute(transaction: RecurringTransaction) {
+        val confirmed = transaction.copy(isConfirmed = true, status = RecurringTransactionStatus.CONFIRMED)
+        recurringRepository.updateTransaction(confirmed)
+        if (confirmed.scheduledDate <= System.currentTimeMillis()) {
+            val result = recurringEngine.executePendingTransaction(confirmed, calculateCurrentBalance())
+            result.rule?.let { recordHistory(it, result.success, result.reason) }
+            if (!result.success) {
+                _uiState.value = _uiState.value.copy(lastExecutionError = result.reason)
             }
         }
+        // Future-dated confirmations are executed by processDueRules once they are due
     }
 
     // Snooze/defer
     fun snoozeTransaction(transaction: RecurringTransaction, days: Int = 1) {
         viewModelScope.launch {
-            val newScheduledDate = transaction.scheduledDate + (days.toLong() * 24 * 60 * 60 * 1000)
+            // Retry relative to now: an old failed occurrence + 1 day may still be in the past
+            val base = maxOf(System.currentTimeMillis(), transaction.scheduledDate)
+            val newScheduledDate = base + (days.toLong() * 24 * 60 * 60 * 1000)
             recurringRepository.snoozeTransaction(transaction.id, newScheduledDate)
         }
     }
@@ -420,7 +431,8 @@ class RecurringViewModel(
                 it.status == RecurringTransactionStatus.FAILED
             }
             failed.forEach { transaction ->
-                val newScheduledDate = transaction.scheduledDate + (24L * 60 * 60 * 1000)
+                val base = maxOf(System.currentTimeMillis(), transaction.scheduledDate)
+                val newScheduledDate = base + (24L * 60 * 60 * 1000)
                 recurringRepository.snoozeTransaction(transaction.id, newScheduledDate)
             }
         }
@@ -436,29 +448,28 @@ class RecurringViewModel(
         filterRules()
     }
 
+    // Applied in-memory on every rules emission so the filtered list never goes stale
     private fun filterRules() {
-        viewModelScope.launch {
-            val query = _searchQuery.value
-            val filter = _selectedFilter.value
+        val query = _searchQuery.value.trim()
+        val filter = _selectedFilter.value
 
-            val allRules = if (query.isBlank()) {
-                recurringRepository.getAllRules().first()
-            } else {
-                recurringRepository.searchRules(query).first()
-            }
-
-            val filteredRules = when (filter) {
-                RuleFilter.ALL -> allRules
-                RuleFilter.ACTIVE -> allRules.filter { it.isActive }
-                RuleFilter.INACTIVE -> allRules.filter { !it.isActive }
-                RuleFilter.INCOME -> allRules.filter { it.transactionType == TransactionType.INCOME }
-                RuleFilter.EXPENSE -> allRules.filter { it.transactionType == TransactionType.EXPENSE }
-                RuleFilter.SAVINGS -> allRules.filter { it.transactionType == TransactionType.SAVINGS_ADD || it.transactionType == TransactionType.SAVINGS_WITHDRAW }
-                RuleFilter.TRANSFER -> allRules.filter { it.transactionType == TransactionType.TRANSFER }
-            }
-
-            _uiState.value = _uiState.value.copy(filteredRules = filteredRules)
+        val allRules = _uiState.value.rules.filter { rule ->
+            query.isBlank() ||
+                rule.name.contains(query, ignoreCase = true) ||
+                rule.description?.contains(query, ignoreCase = true) == true
         }
+
+        val filteredRules = when (filter) {
+            RuleFilter.ALL -> allRules
+            RuleFilter.ACTIVE -> allRules.filter { it.isActive }
+            RuleFilter.INACTIVE -> allRules.filter { !it.isActive }
+            RuleFilter.INCOME -> allRules.filter { it.transactionType == TransactionType.INCOME }
+            RuleFilter.EXPENSE -> allRules.filter { it.transactionType == TransactionType.EXPENSE }
+            RuleFilter.SAVINGS -> allRules.filter { it.transactionType == TransactionType.SAVINGS_ADD || it.transactionType == TransactionType.SAVINGS_WITHDRAW }
+            RuleFilter.TRANSFER -> allRules.filter { it.transactionType == TransactionType.TRANSFER }
+        }
+
+        _uiState.value = _uiState.value.copy(filteredRules = filteredRules)
     }
 
     fun getRuleTemplates(): List<RuleTemplate> {
@@ -579,6 +590,7 @@ class RecurringViewModelFactory(private val context: Context) : ViewModelProvide
             val accountRepository = AccountRepository(database.accountDao())
             val engine = RecurringEngine(
                 repository, incomeRepository, expenseRepository,
+                transactionRepository = TransactionRepository(database.financialTransactionDao()),
                 savingsRepository = savingsRepository,
                 accountRepository = accountRepository
             )

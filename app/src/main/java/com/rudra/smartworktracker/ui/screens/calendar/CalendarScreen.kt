@@ -94,6 +94,17 @@ fun CalendarScreen(
         }
     }
 
+    // Stats card follows whichever month the grid shows
+    LaunchedEffect(currentMonth) {
+        viewModel.onQuickMonthSelect(currentMonth)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -265,7 +276,8 @@ fun CalendarScreen(
                 MonthNavigationCard(
                     currentMonth = currentMonth,
                     onMonthChange = { currentMonth = it },
-                    onQuickMonthSelect = { viewModel.onQuickMonthSelect(it) },
+                    // Quick chips used to update the stats only, leaving the grid on the old month
+                    onQuickMonthSelect = { currentMonth = it },
                     isMultiSelectMode = uiState.isMultiSelectMode,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )

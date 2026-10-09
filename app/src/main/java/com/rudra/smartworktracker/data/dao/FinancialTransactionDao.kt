@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.FinancialTransaction
 import kotlinx.coroutines.flow.Flow
 
@@ -11,6 +12,9 @@ import kotlinx.coroutines.flow.Flow
 interface FinancialTransactionDao {
     @Insert
     suspend fun insertTransaction(transaction: FinancialTransaction)
+
+    @Upsert
+    suspend fun upsertTransaction(transaction: FinancialTransaction)
 
     @Query("DELETE FROM financial_transactions WHERE id = :transactionId")
     suspend fun deleteTransactionById(transactionId: Int)

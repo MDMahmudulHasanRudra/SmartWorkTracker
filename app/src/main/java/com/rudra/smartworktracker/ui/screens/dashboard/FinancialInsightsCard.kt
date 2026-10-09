@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.ui.FinancialSummary
 import com.rudra.smartworktracker.ui.components.AnimatedDoubleCounter
 import com.rudra.smartworktracker.ui.components.SectionHeader
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 private val IncomeGreen = Color(0xFF10B981)
 private val AmberColor = Color(0xFFF59E0B)
@@ -156,7 +157,7 @@ fun FinancialInsightsCard(financialSummary: FinancialSummary) {
                     )
                     AnimatedDoubleCounter(
                         targetValue = financialSummary.monthlyNetSavings,
-                        prefix = "\u09F3",
+                        prefix = CurrencyManager.symbol(),
                         color = if (financialSummary.monthlyNetSavings >= 0) IncomeGreen else expenseColor,
                         fontSize = 22.sp,
                         durationMillis = 800
@@ -262,7 +263,7 @@ private fun InsightMetricCard(
             Spacer(modifier = Modifier.height(4.dp))
             AnimatedDoubleCounter(
                 targetValue = value,
-                prefix = if (suffix.isEmpty()) "\u09F3" else "",
+                prefix = if (suffix.isEmpty()) CurrencyManager.symbol() else "",
                 suffix = suffix,
                 color = color,
                 fontSize = 13.sp,

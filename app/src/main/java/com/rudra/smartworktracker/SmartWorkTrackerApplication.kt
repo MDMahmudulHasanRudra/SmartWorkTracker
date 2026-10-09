@@ -30,34 +30,8 @@ class SmartWorkTrackerApplication : Application() {
     }
 
     private fun scheduleDailyBackup() {
-        val constraints = Constraints.Builder()
-            .setRequiresStorageNotLow(true)
-            .build()
-
-        // Calculate time until 12:05 AM to avoid overlap with midnight system tasks
-        val currentDate = Calendar.getInstance()
-        val dueDate = Calendar.getInstance()
-        dueDate.set(Calendar.HOUR_OF_DAY, 0)
-        dueDate.set(Calendar.MINUTE, 5)
-        dueDate.set(Calendar.SECOND, 0)
-
-        if (dueDate.before(currentDate)) {
-            dueDate.add(Calendar.HOUR_OF_DAY, 24)
-        }
-
-        val initialDelay = dueDate.timeInMillis - currentDate.timeInMillis
-
-        val dailyBackupRequest = PeriodicWorkRequestBuilder<AutoBackupWorker>(24, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
-            .addTag("daily_backup")
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "daily_backup_work",
-            ExistingPeriodicWorkPolicy.KEEP,
-            dailyBackupRequest
-        )
+        // 12:05 AM daily; KEEP so app starts don't push the next run back
+        AutoBackupWorker.schedule(this, replace = false)
     }
 
     private fun scheduleRecurringNotifications() {

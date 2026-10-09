@@ -59,6 +59,9 @@ class AccountRepository(private val accountDao: AccountDao) {
         toAccountId: Long,
         amount: Double
     ): TransferResult {
+        if (amount <= 0) return TransferResult.Error("Amount must be greater than zero")
+        if (fromAccountId == toAccountId) return TransferResult.Error("Cannot transfer to the same account")
+
         val fromAccount = accountDao.getAccountById(fromAccountId)
             ?: return TransferResult.Error("Source account not found")
         
@@ -216,6 +219,8 @@ class AccountRepository(private val accountDao: AccountDao) {
         accountId: Long,
         targetAccountId: Long
     ): DeleteResult {
+        if (accountId == targetAccountId) return DeleteResult.Error("Choose a different account to receive the balance")
+
         val sourceAccount = accountDao.getAccountById(accountId)
             ?: return DeleteResult.Error("Account not found")
         
@@ -248,6 +253,16 @@ class AccountRepository(private val accountDao: AccountDao) {
                 accountDao.updateBalance(accountId, newBalance)
             }
         }
+    }
+
+    /**
+     * Applies a signed change to an account balance without the overdraft guard of
+     * [deductExpenseFromAccount]; used to keep balances consistent when entries are added,
+     * reversed or recorded for an account that is allowed to go negative.
+     */
+    suspend fun adjustBalance(accountId: Long, delta: Double) {
+        val account = accountDao.getAccountById(accountId) ?: return
+        accountDao.updateBalance(accountId, account.balance + delta)
     }
 
     suspend fun findAccountByType(accountType: AccountType): Account? {

@@ -40,7 +40,8 @@ data class EmiUiState(
     val showAddEmiDialog: Boolean = false,
     val showPayEmiDialog: EmiWithLoan? = null,
     val showDeleteConfirmation: EmiWithLoan? = null,
-    val selectedTab: EmiTab = EmiTab.UPCOMING,
+    // ALL by default: a newly added EMI due within 5 days is "Due", not "Upcoming"
+    val selectedTab: EmiTab = EmiTab.ALL,
     val searchQuery: String = "",
     val statistics: EmiStatistics = EmiStatistics(),
     val availableLoans: List<Loan> = emptyList()
@@ -100,14 +101,15 @@ class EmiViewModel(private val emiRepository: EmiRepository) : ViewModel() {
             combine(
                 emiRepository.getTotalPendingAmount(),
                 emiRepository.getPendingEmiCount(),
-                emiRepository.getOverdueEmiCount(),
+                emiRepository.getActiveEmis(),
                 emiRepository.getTotalPenaltyCollected(),
                 emiRepository.getEmisDueThisMonth()
-            ) { totalPending, pendingCount, overdueCount, penaltyCollected, thisMonthEmis ->
+            ) { totalPending, pendingCount, activeEmis, penaltyCollected, thisMonthEmis ->
                 EmiStatistics(
                     totalPending = totalPending ?: 0.0,
                     pendingCount = pendingCount,
-                    overdueCount = overdueCount,
+                    // Same rule as the Overdue tab (EmiStatus), not a raw "past due date" count
+                    overdueCount = activeEmis.count { it.status == EmiStatus.OVERDUE },
                     thisMonthTotal = thisMonthEmis.sumOf { it.amount },
                     totalPenaltyCollected = penaltyCollected ?: 0.0
                 )
@@ -117,14 +119,14 @@ class EmiViewModel(private val emiRepository: EmiRepository) : ViewModel() {
         }
     }
 
+    // Any open loan can get an EMI; previously only loans that already had one were offered
     private fun loadAvailableLoans() {
         viewModelScope.launch {
-            emiRepository.getActiveEmis().first()
-            val loans = mutableListOf<Loan>()
-            _uiState.value.emis.forEach { emiWithLoan ->
-                emiWithLoan.loan?.let { if (it.isActive && !it.isFullyPaid) loans.add(it) }
+            emiRepository.getActiveLoans().collect { loans ->
+                _uiState.value = _uiState.value.copy(
+                    availableLoans = loans.filter { it.isActive && !it.isFullyPaid }
+                )
             }
-            _uiState.value = _uiState.value.copy(availableLoans = loans.distinctBy { it.id })
         }
     }
 
@@ -189,7 +191,6 @@ class EmiViewModel(private val emiRepository: EmiRepository) : ViewModel() {
             )
             emiRepository.insertEmi(emi)
             closeAddEmiDialog()
-            loadAvailableLoans()
         }
     }
 
@@ -197,7 +198,6 @@ class EmiViewModel(private val emiRepository: EmiRepository) : ViewModel() {
         viewModelScope.launch {
             emiRepository.payEmi(emi)
             closePayEmiDialog()
-            loadAvailableLoans()
         }
     }
 
@@ -211,7 +211,6 @@ class EmiViewModel(private val emiRepository: EmiRepository) : ViewModel() {
         viewModelScope.launch {
             emiRepository.deleteEmi(emi)
             closeDeleteConfirmation()
-            loadAvailableLoans()
         }
     }
 

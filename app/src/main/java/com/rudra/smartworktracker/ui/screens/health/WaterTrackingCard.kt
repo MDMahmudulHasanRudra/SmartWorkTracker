@@ -72,14 +72,14 @@ fun WaterLogPopup(
                 Icon(Icons.Default.LocalDrink, null, tint = Color(0xFF2196F3), modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text("Stay Hydrated!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Select your serving size", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text("Select your serving size", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(32.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     WaterLogTile(250.0, "Glass", Icons.Default.LocalDrink, Modifier.weight(1f), onLogWater)
                     WaterLogTile(500.0, "Bottle", Icons.Default.LocalDrink, Modifier.weight(1f), onLogWater)
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                TextButton(onClick = onDismiss) { Text("Dismiss", color = Color.Gray) }
+                TextButton(onClick = onDismiss) { Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }

@@ -35,6 +35,7 @@ import com.rudra.smartworktracker.data.entity.DayOfWeek
 import com.rudra.smartworktracker.data.entity.RecurringFrequency
 import com.rudra.smartworktracker.data.entity.TransactionType
 import java.util.Calendar
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun RecurringHeader(
@@ -101,12 +102,12 @@ fun RecurringHeader(
                 ) {
                     HeaderStatItem(
                         label = "Income/Month",
-                        value = "$${String.format("%.0f", totalIncomeThisMonth)}",
+                        value = "${CurrencyManager.formatWhole(totalIncomeThisMonth)}",
                         valueColor = Color(0xFFBBF7D0)
                     )
                     HeaderStatItem(
                         label = "Expenses/Month",
-                        value = "$${String.format("%.0f", totalExpensesThisMonth)}",
+                        value = "${CurrencyManager.formatWhole(totalExpensesThisMonth)}",
                         valueColor = Color(0xFFFECACA)
                     )
                 }
@@ -125,7 +126,7 @@ fun RecurringHeader(
                         color = Color.White.copy(alpha = 0.8f)
                     )
                     Text(
-                        text = "$${String.format("%.0f", net)}",
+                        text = "${CurrencyManager.formatWhole(net)}",
                         style = MaterialTheme.typography.titleMedium,
                         color = if (net >= 0) Color(0xFFBBF7D0) else Color(0xFFFECACA),
                         fontWeight = FontWeight.Bold

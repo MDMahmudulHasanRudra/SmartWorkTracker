@@ -124,7 +124,7 @@ fun VitalsCard(
 fun VitalItem(label: String, value: String, unit: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-        Text(unit, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(unit, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -151,20 +151,20 @@ fun VitalsQuickCard(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFF44336), modifier = Modifier.size(20.dp))
                     Text("${it.toInt()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("bpm", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text("bpm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             vitalData.bloodPressure?.let {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Speed, contentDescription = null, tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp))
                     Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("BP", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text("BP", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(20.dp))
                 Text("${vitalData.steps}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("steps", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text("steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onClick) {
                 Text("More", style = MaterialTheme.typography.labelMedium)

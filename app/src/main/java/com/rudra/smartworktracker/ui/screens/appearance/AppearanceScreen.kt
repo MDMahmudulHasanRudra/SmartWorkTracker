@@ -1,5 +1,6 @@
 package com.rudra.smartworktracker.ui.screens.appearance
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,19 +23,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rudra.smartworktracker.data.repository.ThemeMode
+import com.rudra.smartworktracker.ui.theme.AccentColors
 
-val accentColors = listOf(
-    Color(0xFF6366F1) to "Indigo",
-    Color(0xFF10B981) to "Emerald",
-    Color(0xFFF59E0B) to "Amber",
-    Color(0xFFEF4444) to "Red",
-    Color(0xFF3B82F6) to "Blue",
-    Color(0xFF8B5CF6) to "Violet",
-    Color(0xFFEC4899) to "Pink",
-    Color(0xFF14B8A6) to "Teal"
-)
+private val accentColors = AccentColors
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceScreen(
     onNavigateBack: () -> Unit,
@@ -73,22 +69,22 @@ fun AppearanceScreen(
                     ThemeOption(
                         icon = Icons.Default.LightMode,
                         label = "Light",
-                        selected = !uiState.isDarkTheme,
-                        onClick = { viewModel.setDarkTheme(false) },
+                        selected = uiState.themeMode == ThemeMode.LIGHT,
+                        onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                         modifier = Modifier.weight(1f)
                     )
                     ThemeOption(
                         icon = Icons.Default.DarkMode,
                         label = "Dark",
-                        selected = uiState.isDarkTheme,
-                        onClick = { viewModel.setDarkTheme(true) },
+                        selected = uiState.themeMode == ThemeMode.DARK,
+                        onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                         modifier = Modifier.weight(1f)
                     )
                     ThemeOption(
                         icon = Icons.Default.PhoneAndroid,
                         label = "System",
-                        selected = false,
-                        onClick = { viewModel.setDarkTheme(false) },
+                        selected = uiState.themeMode == ThemeMode.SYSTEM,
+                        onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -108,18 +104,19 @@ fun AppearanceScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Use wallpaper-based colors",
+                            if (supportsDynamicColor) "Use wallpaper-based colors" else "Requires Android 12 or newer",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
-                        checked = uiState.isDynamicColor,
-                        onCheckedChange = { viewModel.setDynamicColor(it) }
+                        checked = uiState.isDynamicColor && supportsDynamicColor,
+                        onCheckedChange = { viewModel.setDynamicColor(it) },
+                        enabled = supportsDynamicColor
                     )
                 }
 
-                if (!uiState.isDynamicColor) {
+                if (!uiState.isDynamicColor || !supportsDynamicColor) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         "Accent Color",
@@ -127,9 +124,11 @@ fun AppearanceScreen(
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
+                    // Wraps instead of overflowing: 8 swatches don't fit one row on a 360dp phone
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         accentColors.forEachIndexed { index, (color, name) ->
                             Box(

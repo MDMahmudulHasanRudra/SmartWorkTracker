@@ -76,6 +76,7 @@ import com.rudra.smartworktracker.model.SpendAdvisor
 import com.rudra.smartworktracker.model.SpendingTrend
 import java.text.NumberFormat
 import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -186,6 +187,10 @@ private fun AnalysisTab(
 private fun InsightsTab(spendAdvisor: SpendAdvisor, savingsTips: List<SavingsTip>) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { SpendingTrendCard(spendAdvisor.spendingTrend) }
+        item { WeeklySpendCard(spendAdvisor.trendData, spendAdvisor.dailyAverageExpense) }
+        if (spendAdvisor.categoryBreakdown.isNotEmpty()) {
+            item { CategoryBreakdownCard(spendAdvisor.categoryBreakdown) }
+        }
         item { SavingsTipsCard(savingsTips) }
         item { SmartSuggestionsCard(generateSmartSuggestions(spendAdvisor)) }
     }
@@ -224,13 +229,13 @@ private fun FinancialSummaryCard(spendAdvisor: SpendAdvisor) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatItemCard("Total Income", formatCurrency(spendAdvisor.totalIncome), Color(0xFF43A047), Modifier.weight(1f))
-                StatItemCard("Total Expenses", formatCurrency(spendAdvisor.totalExpenses), Color(0xFFE53935), Modifier.weight(1f))
+                StatItemCard("Income this month", formatCurrency(spendAdvisor.totalIncome), Color(0xFF43A047), Modifier.weight(1f))
+                StatItemCard("Spent this month", formatCurrency(spendAdvisor.totalExpenses), Color(0xFFE53935), Modifier.weight(1f))
             }
             Spacer(modifier = Modifier.height(12.dp))
             val progress = if (spendAdvisor.monthlyGoal > 0) (spendAdvisor.totalExpenses / spendAdvisor.monthlyGoal).toFloat().coerceIn(0f, 1f) else 0f
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Monthly Goal", style = MaterialTheme.typography.bodySmall)
+                Text("Monthly budget", style = MaterialTheme.typography.bodySmall)
                 Text("${formatCurrency(spendAdvisor.totalExpenses)} / ${formatCurrency(spendAdvisor.monthlyGoal)}", style = MaterialTheme.typography.bodySmall)
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -255,7 +260,7 @@ private fun PlannedExpenseCard(plannedAmount: String, onAmountChange: (String) -
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Plan a Future Expense", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(value = plannedAmount, onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) onAmountChange(it) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, shape = RoundedCornerShape(12.dp))
+            OutlinedTextField(value = plannedAmount, onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) onAmountChange(it) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (${CurrencyManager.symbol()})") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, shape = RoundedCornerShape(12.dp))
             Spacer(modifier = Modifier.height(12.dp))
             Text("Expense Category", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(8.dp))
@@ -302,8 +307,8 @@ private fun DetailsCard(remainingAfterExpense: Double, safeLimit: Double, warnin
             Text("Analysis Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
             DetailRow("Remaining after expense", formatCurrency(remainingAfterExpense))
-            DetailRow("Safe limit (30%)", formatCurrency(safeLimit))
-            DetailRow("Warning limit (50%)", formatCurrency(warningLimit))
+            DetailRow("Comfortable amount", formatCurrency(safeLimit))
+            DetailRow("Budget left this month", formatCurrency(warningLimit))
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Confidence Score", style = MaterialTheme.typography.bodyMedium)
@@ -385,7 +390,7 @@ private fun BudgetGoalDialog(currentGoal: Double, onDismiss: () -> Unit, onSave:
         Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Set Monthly Budget Goal", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                OutlinedTextField(value = goalAmount, onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) goalAmount = it }, label = { Text("Monthly Goal (৳)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = goalAmount, onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) goalAmount = it }, label = { Text("Monthly Goal (${CurrencyManager.symbol()})") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, shape = RoundedCornerShape(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = onDismiss, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.outline)) { Text("Cancel") }
                     Button(onClick = { goalAmount.toDoubleOrNull()?.let { if (it > 0) onSave(it) } }, modifier = Modifier.weight(1f), enabled = goalAmount.toDoubleOrNull() != null && goalAmount.toDouble() > 0) { Text("Save") }
@@ -406,7 +411,7 @@ private fun DetailRow(label: String, value: String) {
 private fun formatCurrency(amount: Double): String {
     val format = NumberFormat.getNumberInstance(Locale("bn", "BD"))
     format.maximumFractionDigits = 0
-    return "৳${format.format(amount.toLong())}"
+    return CurrencyManager.formatWhole(amount)
 }
 
 private fun generateSmartSuggestions(spendAdvisor: SpendAdvisor): List<String> {
@@ -416,4 +421,75 @@ private fun generateSmartSuggestions(spendAdvisor: SpendAdvisor): List<String> {
     if (spendAdvisor.currentBalance < spendAdvisor.monthlyGoal * 0.3) suggestions.add("Low balance alert!")
     if (suggestions.isEmpty()) suggestions.add("Great job! You're on track with your financial goals.")
     return suggestions
+}
+
+/** Last 7 days of spending as simple bars (oldest on the left). */
+@Composable
+private fun WeeklySpendCard(dailyTotals: List<Double>, dailyAverage: Double) {
+    val max = (dailyTotals.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
+    val dayFormat = remember { java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault()) }
+    val labels = remember(dailyTotals.size) {
+        val count = dailyTotals.size
+        (count - 1 downTo 0).map { daysAgo ->
+            dayFormat.format(java.util.Date(System.currentTimeMillis() - daysAgo * 24L * 60 * 60 * 1000)).take(2)
+        }
+    }
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Last 7 days", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                dailyTotals.forEachIndexed { index, total ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                        Box(
+                            modifier = Modifier
+                                .width(22.dp)
+                                .height((96 * (total / max)).coerceAtLeast(2.0).dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (index == dailyTotals.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(labels.getOrElse(index) { "" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Text(
+                "Average this month: ${formatCurrency(dailyAverage)} per day",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryBreakdownCard(breakdown: Map<ExpenseCategory, Double>) {
+    val total = breakdown.values.sum().coerceAtLeast(1.0)
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Where it went this month", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            breakdown.entries.sortedByDescending { it.value }.forEach { (category, amount) ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(category.displayName, style = MaterialTheme.typography.bodyMedium)
+                        Text(formatCurrency(amount), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    LinearProgressIndicator(
+                        progress = { (amount / total).toFloat() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = category.color,
+                        trackColor = category.color.copy(alpha = 0.15f)
+                    )
+                }
+            }
+        }
+    }
 }

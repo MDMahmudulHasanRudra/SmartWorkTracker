@@ -2,9 +2,9 @@
 <data-extraction-rules>
     <cloud-backup>
         <!-- Database files -->
-        <include domain="database" path="smart_work_tracker_database"/>
-        <include domain="database" path="smart_work_tracker_database-shm"/>
-        <include domain="database" path="smart_work_tracker_database-wal"/>
+        <include domain="database" path="smart_work_tracker_v2"/>
+        <include domain="database" path="smart_work_tracker_v2-shm"/>
+        <include domain="database" path="smart_work_tracker_v2-wal"/>
 
         <!-- Shared preferences -->
         <include domain="sharedpref" path="smart_work_tracker_prefs.xml"/>
@@ -22,9 +22,9 @@
 
     <device-transfer>
         <!-- For device transfers, we can be more generous with what we include -->
-        <include domain="database" path="smart_work_tracker_database"/>
-        <include domain="database" path="smart_work_tracker_database-shm"/>
-        <include domain="database" path="smart_work_tracker_database-wal"/>
+        <include domain="database" path="smart_work_tracker_v2"/>
+        <include domain="database" path="smart_work_tracker_v2-shm"/>
+        <include domain="database" path="smart_work_tracker_v2-wal"/>
 
         <include domain="sharedpref" path="smart_work_tracker_prefs.xml"/>
         <include domain="sharedpref" path="app_settings.xml"/>

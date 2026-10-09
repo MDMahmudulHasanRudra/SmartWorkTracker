@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.rudra.smartworktracker.model.Habit
 import kotlinx.coroutines.flow.Flow
 
@@ -27,4 +28,7 @@ interface HabitDao {
 
     @Delete
     suspend fun deleteHabits(habits: List<Habit>)
+
+    @Upsert
+    suspend fun upsertHabit(habit: Habit)
 }

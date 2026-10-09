@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.ui.FinancialSummary
 import com.rudra.smartworktracker.ui.components.AnimatedDoubleCounter
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 private val IncomeGreen = Color(0xFF10B981)
 private val ExpenseRed = Color(0xFFEF4444)
@@ -106,7 +107,7 @@ private fun TodayMetricCard(
             Spacer(modifier = Modifier.height(8.dp))
             AnimatedDoubleCounter(
                 targetValue = value,
-                prefix = "\u09F3",
+                prefix = CurrencyManager.symbol(),
                 color = color,
                 fontSize = 15.sp,
                 durationMillis = 600

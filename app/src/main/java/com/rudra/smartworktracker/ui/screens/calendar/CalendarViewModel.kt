@@ -8,6 +8,7 @@ import com.rudra.smartworktracker.model.WorkLog
 import com.rudra.smartworktracker.model.WorkType
 import com.rudra.smartworktracker.data.repository.WorkLogRepository
 import com.rudra.smartworktracker.ui.WorkLogUi
+import com.rudra.smartworktracker.utils.DateTimeUtils
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -35,6 +36,11 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
     private val _activeFilters = MutableStateFlow<List<WorkType>>(emptyList())
     private val _searchQuery = MutableStateFlow("")
     private val _monthlyStats = MutableStateFlow(MonthlyStats())
+    // Month shown in the calendar grid; stats follow it rather than the selected day
+    private var displayedMonth: YearMonth = YearMonth.now()
+
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     val uiState: StateFlow<CalendarUiState> = combine(
         _selectedDate,
@@ -110,6 +116,7 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
     }
 
     fun onQuickMonthSelect(yearMonth: YearMonth) {
+        displayedMonth = yearMonth
         updateMonthlyStats(yearMonth)
     }
 
@@ -159,15 +166,39 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
         _searchQuery.value = query
     }
 
+    /**
+     * Copies the entry to the following day (it used to create a duplicate on the same day).
+     * An existing entry on that day is updated instead of adding a second one.
+     */
     fun copyWorkLog(workLog: WorkLogUi) {
         viewModelScope.launch {
-            val newWorkLog = WorkLog(
-                date = Date.from(workLog.date.toInstant()),
-                workType = workLog.workType,
-                startTime = workLog.startTime,
-                endTime = workLog.endTime
-            )
-            repository.insertWorkLog(newWorkLog)
+            val zone = ZoneId.systemDefault()
+            val source = repository.getWorkLogByIdOnce(workLog.id) ?: return@launch
+            val targetDate = workLog.date.toInstant().atZone(zone).toLocalDate().plusDays(1)
+            val existing = repository.getWorkLogForDay(targetDate.atStartOfDay(zone).toInstant().toEpochMilli())
+            if (existing != null) {
+                repository.updateWorkLog(
+                    existing.copy(
+                        workType = source.workType,
+                        startTime = source.startTime,
+                        endTime = source.endTime,
+                        isOvertime = source.isOvertime,
+                        overtimeRate = source.overtimeRate,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            } else {
+                repository.insertWorkLog(
+                    source.copy(
+                        id = 0,
+                        uuid = null,
+                        date = Date.from(targetDate.atStartOfDay(zone).toInstant()),
+                        createdAt = System.currentTimeMillis(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            _messages.tryEmit("Copied to ${targetDate.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM"))}")
         }
     }
 
@@ -195,6 +226,10 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
                 _selectedWorkLog.value = _workLogs.value.find {
                     it.date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate() == date
                 }
+                if (!_multiSelectMode.value && YearMonth.from(date) != displayedMonth) {
+                    displayedMonth = YearMonth.from(date)
+                    updateMonthlyStats(displayedMonth)
+                }
             }
         }
     }
@@ -205,21 +240,26 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
                 it.date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate() == date
             }
 
-            if (existingWorkLog != null) {
-                val updatedWorkLog = WorkLog(
-                    id = existingWorkLog.id,
-                    date = existingWorkLog.date,
-                    workType = workType,
-                    startTime = existingWorkLog.startTime,
-                    endTime = existingWorkLog.endTime
+            val isWorkingDay = workType != WorkType.OFF_DAY
+            val stored = existingWorkLog?.let { repository.getWorkLogByIdOnce(it.id) }
+            if (stored != null) {
+                // Copy the stored row so overtime flags/rates and audit fields aren't lost
+                repository.updateWorkLog(
+                    stored.copy(
+                        workType = workType,
+                        startTime = if (isWorkingDay) stored.startTime ?: "09:00" else null,
+                        endTime = if (isWorkingDay) stored.endTime ?: "17:00" else null,
+                        isOvertime = workType == WorkType.OVERTIME || (stored.isOvertime && workType == stored.workType),
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-                repository.updateWorkLog(updatedWorkLog)
             } else {
                 val workLog = WorkLog(
                     date = Date.from(date.atStartOfDay(ZoneId.systemDefault()).toInstant()),
                     workType = workType,
-                    startTime = "09:00",
-                    endTime = "17:00"
+                    startTime = if (isWorkingDay) "09:00" else null,
+                    endTime = if (isWorkingDay) "17:00" else null,
+                    isOvertime = workType == WorkType.OVERTIME
                 )
                 repository.insertWorkLog(workLog)
             }
@@ -254,21 +294,12 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
     private fun calculateTotalHours(workLogs: List<WorkLogUi>): String {
         var totalMinutes = 0
         workLogs.forEach { workLog ->
-            if (workLog.startTime != null && workLog.endTime != null) {
-                try {
-                    val startParts = workLog.startTime.split(":")
-                    val endParts = workLog.endTime.split(":")
-                    val startHour = startParts[0].toInt()
-                    val startMinute = startParts[1].toInt()
-                    val endHour = endParts[0].toInt()
-                    val endMinute = endParts[1].toInt()
-
-                    totalMinutes += (endHour * 60 + endMinute) - (startHour * 60 + startMinute)
-                } catch (e: Exception) {
-                    totalMinutes += 8 * 60
-                }
-            } else {
-                totalMinutes += 8 * 60
+            totalMinutes += when {
+                // Off days used to add a default 8h to the monthly total
+                workLog.workType == WorkType.OFF_DAY -> 0
+                DateTimeUtils.isValidTime(workLog.startTime) && DateTimeUtils.isValidTime(workLog.endTime) ->
+                    (DateTimeUtils.hoursBetween(workLog.startTime, workLog.endTime) * 60).toInt()
+                else -> 8 * 60
             }
         }
 
@@ -295,7 +326,7 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
                 _selectedWorkLog.value = _workLogs.value.find {
                     it.date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate() == _selectedDate.value
                 }
-                updateMonthlyStats(YearMonth.from(_selectedDate.value))
+                updateMonthlyStats(displayedMonth)
             }
         }
     }
@@ -304,25 +335,8 @@ class CalendarViewModel(private val repository: WorkLogRepository) : ViewModel()
         return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)
     }
 
-    private fun calculateDuration(startTime: String?, endTime: String?): String {
-        if (startTime == null || endTime == null) return "8h"
-        return try {
-            val startParts = startTime.split(":")
-            val endParts = endTime.split(":")
-            val startHour = startParts[0].toInt()
-            val startMinute = startParts[1].toInt()
-            val endHour = endParts[0].toInt()
-            val endMinute = endParts[1].toInt()
-
-            val totalMinutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute)
-            val hours = totalMinutes / 60
-            val minutes = totalMinutes % 60
-
-            if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
-        } catch (e: Exception) {
-            "8h"
-        }
-    }
+    private fun calculateDuration(startTime: String?, endTime: String?): String =
+        DateTimeUtils.formatDuration(startTime, endTime)
 
     companion object {
         fun factory(appDatabase: AppDatabase): ViewModelProvider.Factory {

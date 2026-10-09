@@ -17,6 +17,16 @@ interface LifePlanDao {
     @Query("DELETE FROM life_plan_goals WHERE id = :goalId")
     suspend fun deleteGoal(goalId: String)
 
+    // @Update, not REPLACE: replacing a goal row would cascade-delete its targets
+    @Update
+    suspend fun updateGoal(goal: Goal)
+
+    @Query("SELECT * FROM life_plan_goals WHERE id = :goalId")
+    suspend fun getGoalById(goalId: String): Goal?
+
+    @Query("SELECT * FROM life_plan_targets ORDER BY `order` ASC")
+    fun getAllTargets(): Flow<List<Target>>
+
     @Query("SELECT * FROM life_plan_targets WHERE goalId = :goalId ORDER BY `order` ASC")
     fun getTargetsForGoal(goalId: String): Flow<List<Target>>
 

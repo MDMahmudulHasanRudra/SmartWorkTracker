@@ -94,7 +94,8 @@ fun DashboardHeroSection(
     heroColor: Int = 0,
     onColorPickerClick: () -> Unit = {},
     selectedAccountId: Long = -1L,
-    onAccountSelected: (Long) -> Unit = {}
+    onAccountSelected: (Long) -> Unit = {},
+    workStreak: Int = 0
 ) {
     val displayName = remember(userName) { userName ?: "User" }
     val today = remember { LocalDate.now() }
@@ -251,7 +252,7 @@ fun DashboardHeroSection(
                     Spacer(modifier = Modifier.height(4.dp))
                     AnimatedDoubleCounter(
                         targetValue = displayValue,
-                        prefix = "\u09F3",
+                        prefix = CurrencyManager.symbol(),
                         color = Color.White,
                         fontSize = 40.sp,
                         durationMillis = 1000
@@ -273,13 +274,13 @@ fun DashboardHeroSection(
                     )
                     HeroActionChip(
                         icon = Icons.Default.LocalFireDepartment,
-                        label = "Streak: 1",
-                        onClick = {},
+                        label = if (workStreak == 1) "1 day" else "$workStreak days",
+                        onClick = { showWorkTypeSelector = true },
                         modifier = Modifier.weight(1f)
                     )
                     HeroActionChip(
-                        icon = Icons.Default.AccountBalanceWallet,
-                        label = "Work Type",
+                        icon = Icons.Default.Work,
+                        label = todayWorkType?.let { workTypeLabel(it) } ?: "Work Type",
                         onClick = { showWorkTypeSelector = true },
                         modifier = Modifier.weight(1f)
                     )
@@ -452,7 +453,9 @@ private fun HeroActionChip(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -541,6 +544,14 @@ private fun WorkTypeSelector(
             }
         }
     }
+}
+
+private fun workTypeLabel(type: WorkType): String = when (type) {
+    WorkType.OFFICE -> "Office"
+    WorkType.HOME_OFFICE -> "Home"
+    WorkType.OFF_DAY -> "Off Day"
+    WorkType.EXTRA_WORK -> "Extra"
+    WorkType.OVERTIME -> "Overtime"
 }
 
 private data class WorkTypeOption(

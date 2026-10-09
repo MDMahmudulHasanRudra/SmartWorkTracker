@@ -4,11 +4,9 @@ import com.rudra.smartworktracker.data.dao.WorkLogDao
 import com.rudra.smartworktracker.model.WorkLog
 import com.rudra.smartworktracker.model.WorkType
 import com.rudra.smartworktracker.ui.MonthlyStats
+import com.rudra.smartworktracker.utils.DateTimeUtils
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import kotlinx.coroutines.flow.map
 
 class WorkLogRepository(private val workLogDao: WorkLogDao) {
 
@@ -16,13 +14,16 @@ class WorkLogRepository(private val workLogDao: WorkLogDao) {
         return workLogDao.getTodayWorkLog()
     }
 
-    fun getMonthlyStats(): Flow<MonthlyStats> = flow {
-        val monthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Calendar.getInstance().time)
-        val officeDays = workLogDao.countByType(monthYear, WorkType.OFFICE)
-        val homeOfficeDays = workLogDao.countByType(monthYear, WorkType.HOME_OFFICE)
-        val offDays = workLogDao.countByType(monthYear, WorkType.OFF_DAY)
-        val extraHours = workLogDao.getTotalExtraHours(monthYear) ?: 0.0
-        emit(
+    /** Live stats for the current month; recomputed whenever a work log changes. */
+    fun getMonthlyStats(): Flow<MonthlyStats> {
+        val (monthStart, monthEnd) = DateTimeUtils.monthRange()
+        return workLogDao.getWorkLogsBetween(monthStart, monthEnd).map { logs ->
+            val officeDays = logs.count { it.workType == WorkType.OFFICE }
+            val homeOfficeDays = logs.count { it.workType == WorkType.HOME_OFFICE }
+            val offDays = logs.count { it.workType == WorkType.OFF_DAY }
+            val extraHours = logs
+                .filter { it.workType == WorkType.EXTRA_WORK || it.workType == WorkType.OVERTIME }
+                .sumOf { DateTimeUtils.hoursBetween(it.startTime, it.endTime) }
             MonthlyStats(
                 officeDays = officeDays,
                 homeOfficeDays = homeOfficeDays,
@@ -30,8 +31,17 @@ class WorkLogRepository(private val workLogDao: WorkLogDao) {
                 extraHours = extraHours,
                 totalWorkDays = officeDays + homeOfficeDays
             )
-        )
+        }
     }
+
+    suspend fun getWorkLogForDay(millis: Long = System.currentTimeMillis()): WorkLog? {
+        val (start, end) = DateTimeUtils.dayRange(millis)
+        return workLogDao.getFirstWorkLogBetween(start, end)
+    }
+
+    suspend fun getWorkLogByIdOnce(id: Long): WorkLog? = workLogDao.getWorkLogByIdOnce(id)
+
+    fun getWorkLogsBetween(start: Long, end: Long): Flow<List<WorkLog>> = workLogDao.getWorkLogsBetween(start, end)
 
     fun getRecentActivities(): Flow<List<WorkLog>> {
         return workLogDao.getRecentWorkLogs()

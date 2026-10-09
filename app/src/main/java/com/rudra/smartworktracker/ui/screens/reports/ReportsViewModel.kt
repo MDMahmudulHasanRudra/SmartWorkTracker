@@ -9,6 +9,7 @@ import com.rudra.smartworktracker.data.repository.IncomeRepository
 import com.rudra.smartworktracker.data.repository.WorkLogRepository
 import com.rudra.smartworktracker.model.Expense
 import com.rudra.smartworktracker.model.WorkLog
+import com.rudra.smartworktracker.utils.CurrencyManager
 import com.rudra.smartworktracker.utils.DateTimeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -222,28 +223,17 @@ class ReportsViewModel(
                 }
 
                 DateRange.Custom -> {
-                    val start = customDateRange.startDate ?: 0L
-                    val end = customDateRange.endDate ?: Long.MAX_VALUE
-                    // Adjust end date to end of day
-                    val adjustedEnd = if (end != Long.MAX_VALUE) {
-                        Calendar.getInstance().apply {
-                            timeInMillis = end
-                            set(Calendar.HOUR_OF_DAY, 23)
-                            set(Calendar.MINUTE, 59)
-                            set(Calendar.SECOND, 59)
-                            set(Calendar.MILLISECOND, 999)
-                        }.timeInMillis
-                    } else end
-                    // Adjust start date to beginning of day
-                    val adjustedStart = if (start != 0L) {
-                        Calendar.getInstance().apply {
-                            timeInMillis = start
-                            set(Calendar.HOUR_OF_DAY, 0)
-                            set(Calendar.MINUTE, 0)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }.timeInMillis
-                    } else start
+                    // DatePicker values are UTC midnights: read the calendar day in UTC, then
+                    // expand it to the local day so the range doesn't shift by the zone offset
+                    val zone = java.time.ZoneId.systemDefault()
+                    val adjustedStart = customDateRange.startDate?.let {
+                        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                            .atStartOfDay(zone).toInstant().toEpochMilli()
+                    } ?: 0L
+                    val adjustedEnd = customDateRange.endDate?.let {
+                        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                            .plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+                    } ?: Long.MAX_VALUE
                     adjustedStart to adjustedEnd
                 }
             }
@@ -282,12 +272,11 @@ class ReportsViewModel(
                 SortOption.AmountLowest -> categoryFilteredItems.sortedBy { it.amount }
             }
 
+            // Overnight shifts count forward instead of subtracting hours
             val totalWorkHours =
                 categoryFilteredItems.filterIsInstance<WorkLogReportItem>().sumOf {
-                    val start = it.workLog.startTime?.let { time -> DateTimeUtils.parseTime(time) } ?: 0L
-                    val end = it.workLog.endTime?.let { time -> DateTimeUtils.parseTime(time) } ?: 0L
-                    (end - start).toDouble() / (1000 * 60 * 60)
-                }.toLong()
+                    DateTimeUtils.hoursBetween(it.workLog.startTime, it.workLog.endTime)
+                }.let { kotlin.math.round(it).toLong() }
 
             val totalIncome =
                 categoryFilteredItems.filterIsInstance<IncomeReportItem>().sumOf { it.income.amount }
@@ -407,9 +396,9 @@ class ReportsViewModel(
         }
 
         reportBuilder.append("Total Work Hours: ${uiStateValue.totalWorkHours} hrs\n")
-        reportBuilder.append("Total Income: ${uiStateValue.totalIncome} TK\n")
-        reportBuilder.append("Total Expense: ${uiStateValue.totalExpense} TK\n")
-        reportBuilder.append("Net Profit: ${uiStateValue.netProfit} TK\n\n")
+        reportBuilder.append("Total Income: ${CurrencyManager.format(uiStateValue.totalIncome)}\n")
+        reportBuilder.append("Total Expense: ${CurrencyManager.format(uiStateValue.totalExpense)}\n")
+        reportBuilder.append("Net Profit: ${CurrencyManager.format(uiStateValue.netProfit)}\n\n")
         reportBuilder.append("Details:\n")
 
         uiStateValue.filteredItems.forEach { item ->
@@ -423,7 +412,7 @@ class ReportsViewModel(
                 }
 
                 is IncomeReportItem -> {
-                    reportBuilder.append("Income: ${item.income.amount} TK - ${item.income.category} - ${
+                    reportBuilder.append("Income: ${CurrencyManager.format(item.income.amount)} - ${item.income.category} - ${
                         dateFormat.format(
                             Date(item.income.timestamp)
                         )
@@ -431,7 +420,7 @@ class ReportsViewModel(
                 }
 
                 is ExpenseReportItem -> {
-                    reportBuilder.append("Expense: ${item.expense.amount} TK - ${item.expense.category} - ${
+                    reportBuilder.append("Expense: ${CurrencyManager.format(item.expense.amount)} - ${item.expense.category.displayName} - ${
                         dateFormat.format(
                             Date(item.expense.timestamp)
                         )

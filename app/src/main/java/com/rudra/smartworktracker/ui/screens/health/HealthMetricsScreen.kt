@@ -1054,7 +1054,7 @@ fun BreakReminderPopup(
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Time for a $breakType!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Refresh your mind and body to maintain peak focus.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, textAlign = TextAlign.Center)
+                Text("Refresh your mind and body to maintain peak focus.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(32.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = onSnooze, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {

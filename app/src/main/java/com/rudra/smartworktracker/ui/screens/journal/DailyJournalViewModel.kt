@@ -30,6 +30,11 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
             null
         )
 
+    /** Emits once the journal for the selected date has actually been read (null = still loading). */
+    val loadedJournal: StateFlow<JournalLoad?> = _selectedDate
+        .flatMapLatest { date -> journalDao.getJournalForDate(date).map { JournalLoad(date, it) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val journalHistory: StateFlow<List<DailyJournal>> = journalDao.getAllJournals()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -45,21 +50,15 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
             emptyList()
         )
 
-    val journalStats: StateFlow<JournalStats> = monthlyJournals
-        .map { journals ->
-            calculateJournalStats(journals)
+    // Stats describe the month, but the streak needs the full history to cross month boundaries
+    val journalStats: StateFlow<JournalStats> = combine(monthlyJournals, journalHistory) { month, all ->
+            calculateJournalStats(month).copy(streakDays = calculateStreak(all))
         }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             JournalStats()
         )
-
-    init {
-        viewModelScope.launch {
-            loadDraftIfExists()
-        }
-    }
 
     fun saveOrUpdateJournal(journal: DailyJournal) {
         viewModelScope.launch {
@@ -70,7 +69,7 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
                     journal.eveningReflection.isBlank() &&
                     journal.gratitude.isBlank()
                 ) {
-                    _uiState.update { it.copy(error = "Journal entry cannot be completely empty") }
+                    _uiState.update { it.copy(isLoading = false, error = "Journal entry cannot be completely empty") }
                     return@launch
                 }
 
@@ -153,10 +152,6 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
         _uiState.update { it.copy(saveSuccess = false) }
     }
 
-    private suspend fun loadDraftIfExists() {
-        // Implementation for loading drafts from persistent storage
-    }
-
     private suspend fun clearDraft() {
         _uiState.update { it.copy(hasUnsavedChanges = false) }
     }
@@ -208,7 +203,8 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
             .sortedDescending()
 
         var streak = 0
-        var currentDate = LocalDate.now()
+        // Today not written yet doesn't break a streak that ran through yesterday
+        var currentDate = LocalDate.now().let { if (it in journalDates) it else it.minusDays(1) }
 
         while (journalDates.contains(currentDate)) {
             streak++
@@ -243,6 +239,8 @@ class DailyJournalViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 }
+
+data class JournalLoad(val date: LocalDate, val journal: DailyJournal?)
 
 data class JournalUiState(
     val isLoading: Boolean = false,

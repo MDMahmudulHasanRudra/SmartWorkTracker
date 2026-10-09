@@ -15,7 +15,9 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 class SpendAdvisorViewModel(
     application: Application,
@@ -42,8 +44,11 @@ class SpendAdvisorViewModel(
         loadSavingsTips()
     }
 
+    private var loadJob: Job? = null
+
     private fun loadSpendAdvisor() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             repository.getSpendAdvisorFlow().collect { advisor ->
                 _spendAdvisor.value = advisor
                 _isLoading.value = false
@@ -97,17 +102,18 @@ class SpendAdvisorViewModel(
     fun analyzeExpense(plannedAmount: Double, category: ExpenseCategory = ExpenseCategory.OTHER) {
         val advisor = _spendAdvisor.value
         val currentBalance = advisor.currentBalance
-        val monthlyGoal = advisor.monthlyGoal
-
-        val safeLimit = monthlyGoal * 0.3
-        val warningLimit = monthlyGoal * 0.5
+        // What is left of this month's budget; half of it is the comfortable amount.
+        // (The old thresholds made "Risky" unreachable: 50% of goal was checked after 30%.)
+        val budgetLeft = (advisor.monthlyGoal - advisor.totalExpenses).coerceAtLeast(0.0)
+        val safeLimit = budgetLeft * 0.5
+        val warningLimit = budgetLeft
 
         val remainingAfterExpense = currentBalance - plannedAmount
 
         val advice = when {
-            remainingAfterExpense >= safeLimit -> ExpenseAdvice.SAFE
-            remainingAfterExpense >= warningLimit -> ExpenseAdvice.RISKY
-            else -> ExpenseAdvice.NOT_ACCEPTABLE
+            plannedAmount > currentBalance || plannedAmount > warningLimit -> ExpenseAdvice.NOT_ACCEPTABLE
+            plannedAmount > safeLimit -> ExpenseAdvice.RISKY
+            else -> ExpenseAdvice.SAFE
         }
 
         val confidenceScore = calculateConfidenceScore(
@@ -119,8 +125,12 @@ class SpendAdvisorViewModel(
 
         val suggestion = when (advice) {
             ExpenseAdvice.SAFE -> null
-            ExpenseAdvice.RISKY -> "Consider reducing to ৳${(currentBalance * 0.3).toLong()} for better savings."
-            ExpenseAdvice.NOT_ACCEPTABLE -> "Suggested: ৳${(currentBalance * 0.2).toLong()} instead of ৳${plannedAmount.toLong()}"
+            ExpenseAdvice.RISKY -> "Keeping it under ${CurrencyManager.formatWhole(safeLimit)} leaves room for the rest of the month."
+            ExpenseAdvice.NOT_ACCEPTABLE -> when {
+                plannedAmount > currentBalance -> "This is more than your current balance (${CurrencyManager.formatWhole(currentBalance)})."
+                budgetLeft <= 0.0 -> "This month's budget is already used up."
+                else -> "Only ${CurrencyManager.formatWhole(budgetLeft)} of this month's budget is left."
+            }
         }
 
         val analysis = ExpenseAnalysis(
@@ -164,7 +174,6 @@ class SpendAdvisorViewModel(
         _isLoading.value = true
         loadSpendAdvisor()
     }
-
     private fun calculateConfidenceScore(
         currentBalance: Double,
         plannedAmount: Double,

@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 class SettingsRepository(private val context: Context) {
 
     private val mealRateKey = doublePreferencesKey("meal_rate")
@@ -22,6 +24,7 @@ class SettingsRepository(private val context: Context) {
     private val dailyWorkHoursKey = doublePreferencesKey("daily_work_hours")
     private val workingDaysPerWeekKey = intPreferencesKey("working_days_per_week")
     private val darkThemeKey = booleanPreferencesKey(DARK_THEME)
+    private val themeModeKey = stringPreferencesKey("theme_mode")
     private val notificationsKey = booleanPreferencesKey(NOTIFICATIONS)
     private val vibrationKey = booleanPreferencesKey(VIBRATION)
     private val autoBackupKey = booleanPreferencesKey(AUTO_BACKUP)
@@ -100,6 +103,24 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDarkTheme(isDark: Boolean) {
         context.dataStore.edit {
             it[darkThemeKey] = isDark
+            it[themeModeKey] = (if (isDark) ThemeMode.DARK else ThemeMode.LIGHT).name
+        }
+    }
+
+    /** SYSTEM until the user picks Light/Dark (older installs fall back to the dark_theme flag). */
+    val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
+        prefs[themeModeKey]?.let { stored -> ThemeMode.entries.firstOrNull { it.name == stored } }
+            ?: when (prefs[darkThemeKey]) {
+                true -> ThemeMode.DARK
+                false -> ThemeMode.LIGHT
+                null -> ThemeMode.SYSTEM
+            }
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit {
+            it[themeModeKey] = mode.name
+            if (mode != ThemeMode.SYSTEM) it[darkThemeKey] = mode == ThemeMode.DARK
         }
     }
 
@@ -174,7 +195,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val dynamicColor: Flow<Boolean> = context.dataStore.data.map {
-        it[dynamicColorKey] ?: true
+        it[dynamicColorKey] ?: false
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {

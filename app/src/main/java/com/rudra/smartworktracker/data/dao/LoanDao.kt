@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.Loan
 import com.rudra.smartworktracker.data.entity.LoanType
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,9 @@ interface LoanDao {
 
     @Update
     suspend fun updateLoan(loan: Loan)
+
+    @Upsert
+    suspend fun upsertLoan(loan: Loan)
 
     @Delete
     suspend fun deleteLoan(loan: Loan)

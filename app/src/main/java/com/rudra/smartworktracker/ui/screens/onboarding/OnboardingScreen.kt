@@ -3,6 +3,7 @@ package com.rudra.smartworktracker.ui.screens.onboarding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -72,6 +73,7 @@ fun OnboardingScreen(onOnboardingFinished: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .systemBarsPadding()
     ) {
         HorizontalPager(
             state = pagerState,
@@ -170,11 +172,11 @@ private fun OnboardingPageContent(page: OnboardingPage) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp),
+            // Keep the content clear of the dots/buttons overlaid at the bottom
+            .padding(start = 32.dp, end = 32.dp, top = 40.dp, bottom = 200.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Spacer(modifier = Modifier.height(40.dp))
 
         // Icon card
         Box(

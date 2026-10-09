@@ -39,7 +39,8 @@ class BillSplitViewModel(
 
     fun markSettled(billSplit: BillSplit) {
         viewModelScope.launch {
-            repository.update(billSplit.copy(isSettled = true))
+            // Toggles, so a bill marked settled by mistake can be reopened
+            repository.update(billSplit.copy(isSettled = !billSplit.isSettled))
         }
     }
 

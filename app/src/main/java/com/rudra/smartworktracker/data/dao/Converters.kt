@@ -21,7 +21,8 @@ class Converters {
 
     @TypeConverter
     fun fromString(value: String?): List<String> {
-        return value?.split(",") ?: emptyList()
+        // "".split(",") yields [""], which turned empty lists into a single blank entry
+        return if (value.isNullOrEmpty()) emptyList() else value.split(",")
     }
 
     @TypeConverter

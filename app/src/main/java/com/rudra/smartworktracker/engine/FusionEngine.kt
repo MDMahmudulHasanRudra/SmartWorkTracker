@@ -24,6 +24,9 @@ class FusionEngine(
         amount: Double,
         note: String?
     ): FusionResult {
+        if (amount <= 0) return FusionResult.Error("Amount must be greater than zero")
+        if (fromAccountId == toAccountId) return FusionResult.Error("Cannot transfer to the same account")
+
         val fromAccount = accountDao.getAccountById(fromAccountId)
             ?: return FusionResult.Error("Source account not found")
 
@@ -56,9 +59,6 @@ class FusionEngine(
         )
         financialTransactionDao.insertTransaction(transaction)
 
-        updateInsights(fromAccount, toAccount, amount)
-        checkGoalProgress(toAccount, amount)
-
         return FusionResult.Success(
             fromAccount = fromAccount.copy(balance = fromAccount.balance - amount),
             toAccount = toAccount.copy(balance = toAccount.balance + amount),
@@ -74,45 +74,13 @@ class FusionEngine(
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
 
+        // FinancialTransaction stores the legacy AccountType, so compare against the account's
+        // mapped type (comparing AccountCategory names like WALLET to CASH never matched)
+        val sourceType = accountDao.getAccountById(accountId)?.type?.toOldAccountType() ?: return 0.0
         val transactions = financialTransactionDao.getAllTransactions().first()
         return transactions
-            .filter { it.date >= today && it.source.name == getAccountTypeName(accountId) }
+            .filter { it.date >= today && it.type == TransactionType.TRANSFER && it.source == sourceType }
             .sumOf { it.amount }
-    }
-
-    private suspend fun getAccountTypeName(accountId: Long): String {
-        val account = accountDao.getAccountById(accountId)
-        return account?.type?.name ?: "UNKNOWN"
-    }
-
-    private suspend fun updateInsights(fromAccount: Account, toAccount: Account, amount: Double) {
-        val insights = mutableListOf<String>()
-        
-        if (amount > 10000) {
-            insights.add("Large transfer detected: ${CurrencyManager.format(amount)}")
-        }
-
-        val totalTransfersToday = getTodayTransferTotal(fromAccount.id)
-        if (totalTransfersToday > 5) {
-            insights.add("High transfer frequency: ${totalTransfersToday.toInt()} transfers today")
-        }
-
-        val accountUsage = getAccountUsageRanking()
-        if (accountUsage.firstOrNull()?.id == fromAccount.id) {
-            insights.add("Most used account: ${fromAccount.name}")
-        }
-    }
-
-    private suspend fun getAccountUsageRanking(): List<Account> {
-        return accountDao.getAllAccountsList()
-            .sortedByDescending { it.lastUpdated }
-    }
-
-    private suspend fun checkGoalProgress(account: Account, amount: Double) {
-        account.linkedGoalId?.let { goalId ->
-            val linkedAccounts = accountDao.getAccountsLinkedToGoal(goalId).first()
-            val totalInGoal = linkedAccounts.sumOf { it.balance }
-        }
     }
 
     fun getNetWorth(): Flow<Double?> {

@@ -75,7 +75,8 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
             }
         }
         if (savedGoals.isNotEmpty()) {
-            _goals.value = savedGoals
+            // Merge: saving one goal used to drop every other default goal
+            _goals.value = _goals.value + savedGoals
         }
     }
 
@@ -99,7 +100,7 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
                 _uiState.update { it.copy(isLoading = true, error = null) }
 
                 if (!isValidMetric(type, value)) {
-                    _uiState.update { it.copy(error = "Please enter a valid ${type.displayName} value.") }
+                    _uiState.update { it.copy(isLoading = false, error = "Please enter a valid ${type.displayName} value.") }
                     return@launch
                 }
 
@@ -311,9 +312,19 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
                     entriesForType.sumOf { it.value }
                 type == HealthMetricType.BLOOD_PRESSURE -> 
                     entriesForType.maxByOrNull { it.timestamp }?.let { "${it.value.toInt()}/${it.secondaryValue?.toInt() ?: 0}" }
+                // Body measurements carry over from the last time they were logged
+                type == HealthMetricType.WEIGHT || type == HealthMetricType.HEIGHT ->
+                    metrics.filter { it.type == type }.maxByOrNull { it.timestamp }?.value
                 else -> entriesForType.maxByOrNull { it.timestamp }?.value
             }
         }
+
+        val zone = ZoneId.systemDefault()
+        fun dayOf(metric: HealthMetric) = Instant.ofEpochMilli(metric.timestamp).atZone(zone).toLocalDate()
+        val lastWeek = (0L..6L).map { today.minusDays(it) }.toSet()
+        // Share of the last 7 days with at least one entry of the type
+        fun weeklyConsistency(type: HealthMetricType): Int =
+            metrics.filter { it.type == type }.map(::dayOf).filter { it in lastWeek }.toSet().size * 100 / 7
 
         val weightProgress = metrics.filter { it.type == HealthMetricType.WEIGHT }
             .sortedBy { it.timestamp }
@@ -361,7 +372,7 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
         val workHoursTrend = calculateWorkHoursTrend(metrics)
         val productivityTrend = calculateProductivityTrend(metrics)
         val nutritionData = calculateNutritionData(todaysMetrics)
-        val vitalData = calculateVitalData(metrics)
+        val vitalData = calculateVitalData(metrics, todaysMetrics)
 
         return HealthData(
             currentValues = currentValues,
@@ -375,7 +386,11 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
             productivityTrend = productivityTrend,
             nutritionData = nutritionData,
             vitalData = vitalData,
-            lastUpdated = metrics.maxOfOrNull { it.timestamp }
+            lastUpdated = metrics.maxOfOrNull { it.timestamp },
+            waterConsistency = weeklyConsistency(HealthMetricType.WATER),
+            sleepConsistency = weeklyConsistency(HealthMetricType.SLEEP),
+            exerciseConsistency = weeklyConsistency(HealthMetricType.EXERCISE),
+            activeDates = metrics.map(::dayOf).toSet()
         )
     }
 
@@ -430,14 +445,15 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
         )
     }
 
-    private fun calculateVitalData(metrics: List<HealthMetric>): VitalData {
+    private fun calculateVitalData(metrics: List<HealthMetric>, todaysMetrics: List<HealthMetric>): VitalData {
         val latestHeartRate = metrics.filter { it.type == HealthMetricType.HEART_RATE }
             .maxByOrNull { it.timestamp }?.value
         
         val latestBloodPressure = metrics.filter { it.type == HealthMetricType.BLOOD_PRESSURE }
             .maxByOrNull { it.timestamp }?.let { "${it.value.toInt()}/${it.secondaryValue?.toInt() ?: 0}" }
         
-        val latestSteps = metrics.filter { it.type == HealthMetricType.STEPS }
+        // Today's steps (previously summed every step ever logged)
+        val latestSteps = todaysMetrics.filter { it.type == HealthMetricType.STEPS }
             .sumOf { it.value }.toInt()
 
         return VitalData(
@@ -460,10 +476,10 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
         return HealthAnalytics(
             bmi = bmi,
             bmiCategory = bmiCategory,
-            waterConsistency = calculateConsistency(data.recentEntries, HealthMetricType.WATER),
-            sleepConsistency = calculateConsistency(data.recentEntries, HealthMetricType.SLEEP),
-            exerciseConsistency = calculateConsistency(data.recentEntries, HealthMetricType.EXERCISE),
-            dailyStreak = calculateDailyStreak(data.recentEntries),
+            waterConsistency = data.waterConsistency,
+            sleepConsistency = data.sleepConsistency,
+            exerciseConsistency = data.exerciseConsistency,
+            dailyStreak = calculateDailyStreak(data.activeDates),
             productivityScore = productivityScore,
             eyeStrainLevel = eyeStrainLevel,
             nutritionGoals = NutritionGoals(
@@ -492,23 +508,14 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
-    private fun calculateConsistency(entries: List<HealthMetricEntry>, type: HealthMetricType): Int {
-        val typeEntries = entries.filter { it.type == type }
-        return if (typeEntries.isEmpty()) 0 else min(100, typeEntries.size * 10)
-    }
-
-    private fun calculateDailyStreak(entries: List<HealthMetricEntry>): Int {
-        val dates = entries.map {
-            LocalDateTime.ofInstant(Instant.ofEpochMilli(it.timestamp), ZoneId.systemDefault()).toLocalDate()
-        }.distinct().sortedDescending()
-
+    /** Consecutive days with any logged metric, ending today (or yesterday if nothing is logged yet today). */
+    private fun calculateDailyStreak(activeDates: Set<LocalDate>): Int {
+        var day = LocalDate.now()
+        if (day !in activeDates) day = day.minusDays(1)
         var streak = 0
-        var currentDate = LocalDate.now()
-        for (date in dates) {
-            if (date == currentDate || date == currentDate.minusDays(1)) {
-                streak++
-                currentDate = currentDate.minusDays(1)
-            } else break
+        while (day in activeDates) {
+            streak++
+            day = day.minusDays(1)
         }
         return streak
     }
@@ -599,13 +606,15 @@ class HealthMetricsViewModel(application: Application) : AndroidViewModel(applic
         return if (yesterday > 0) ((today - yesterday) / yesterday * 100).toFloat() else 0f
     }
 
+    /** Counts today's goals met, using the user's own targets. */
     private fun calculateCompletedGoals(data: HealthData): Int {
+        val goals = _goals.value
         var completed = 0
-        if ((data.currentValues[HealthMetricType.WATER] as? Double ?: 0.0) >= 2000) completed++
-        if (data.workSessionStats.totalBreaks >= 5) completed++
-        if (data.workSessionStats.totalExercise >= 30) completed++
-        if ((data.currentValues[HealthMetricType.SLEEP] as? Double ?: 0.0) >= 7) completed++
-        if ((data.currentValues[HealthMetricType.STEPS] as? Double ?: 0.0) >= 10000) completed++
+        if ((data.currentValues[HealthMetricType.WATER] as? Double ?: 0.0) >= (goals[HealthMetricType.WATER] ?: 3000.0)) completed++
+        if (data.workSessionStats.totalBreaks >= (goals[HealthMetricType.BREAKS] ?: 8.0)) completed++
+        if (data.workSessionStats.totalExercise >= (goals[HealthMetricType.EXERCISE] ?: 30.0)) completed++
+        if ((data.currentValues[HealthMetricType.SLEEP] as? Double ?: 0.0) >= (goals[HealthMetricType.SLEEP] ?: 7.5)) completed++
+        if ((data.currentValues[HealthMetricType.STEPS] as? Double ?: 0.0) >= (goals[HealthMetricType.STEPS] ?: 10000.0)) completed++
         return completed
     }
 
@@ -725,7 +734,9 @@ data class HealthData(
     val productivityTrend: List<Pair<LocalDate, Double>> = emptyList(),
     val nutritionData: NutritionData = NutritionData(),
     val vitalData: VitalData = VitalData(),
-    val lastUpdated: Long? = null
+    val lastUpdated: Long? = null,
+    val exerciseConsistency: Int = 0,
+    val activeDates: Set<LocalDate> = emptySet()
 )
 
 data class HealthMetricEntry(

@@ -14,6 +14,7 @@ import java.time.LocalDate
 data class DashboardUiState(
     val userName: String? = null,
     val todayWorkType: WorkType? = null,
+    val workStreak: Int = 0,
     val monthlyStats: MonthlyStats = MonthlyStats(),
     val recentActivities: List<WorkLogUi> = emptyList(),
     val financialSummary: FinancialSummary = FinancialSummary(),

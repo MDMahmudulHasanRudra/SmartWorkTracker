@@ -57,7 +57,8 @@ class SchedulerViewModel(
         scheduleRepository.getAllSchedules()
             .onEach { schedules ->
                 _uiState.value = _uiState.value.copy(schedules = schedules)
-                alarmScheduler?.rescheduleAll(schedules.filter { it.isEnabled })
+                // Pass every schedule so disabled ones are cancelled too
+                alarmScheduler?.rescheduleAll(schedules)
             }
             .launchIn(viewModelScope)
     }
@@ -93,12 +94,13 @@ class SchedulerViewModel(
             )
 
             try {
-                scheduleRepository.insertSchedule(newSchedule)
-                alarmScheduler?.schedule(newSchedule)
-                
+                // The alarm must use the generated row id, or it can never be cancelled/updated
+                val savedSchedule = newSchedule.copy(id = scheduleRepository.insertSchedule(newSchedule))
+                alarmScheduler?.schedule(savedSchedule)
+
                 // Add to history
                 addHistoryEntry(
-                    scheduleId = newSchedule.id,
+                    scheduleId = savedSchedule.id,
                     type = HistoryType.CREATED,
                     details = "Created schedule '${newSchedule.title}'",
                     ringtoneName = newSchedule.ringtoneName
@@ -195,7 +197,9 @@ class SchedulerViewModel(
     fun testAlarmNow(schedule: Schedule) {
         viewModelScope.launch {
             val testTime = LocalTime.now().plusSeconds(5)
+            // Separate id so the test alarm does not replace the schedule's real alarm
             val testSchedule = schedule.copy(
+                id = (schedule.id ?: 0L) + AlarmScheduler.TEST_ID_OFFSET,
                 time = testTime,
                 isRepeating = false,
                 isEnabled = true

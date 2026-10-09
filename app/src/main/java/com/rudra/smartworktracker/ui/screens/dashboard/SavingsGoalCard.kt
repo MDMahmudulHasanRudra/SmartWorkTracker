@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.ui.FinancialSummary
 import com.rudra.smartworktracker.ui.components.AnimatedDoubleCounter
 import com.rudra.smartworktracker.ui.components.SectionHeader
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun SavingsGoalCard(financialSummary: FinancialSummary) {
@@ -123,7 +124,7 @@ fun SavingsGoalCard(financialSummary: FinancialSummary) {
                     )
                     AnimatedDoubleCounter(
                         targetValue = monthlySavings,
-                        prefix = "\u09F3",
+                        prefix = CurrencyManager.symbol(),
                         color = savingsColor,
                         fontSize = 22.sp,
                         durationMillis = 800

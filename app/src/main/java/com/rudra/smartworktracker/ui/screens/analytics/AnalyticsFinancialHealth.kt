@@ -27,6 +27,7 @@ import com.rudra.smartworktracker.model.Expense
 import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.util.*
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 private val IncomeGreen = Color(0xFF4CAF50)
 private val ExpenseRed = Color(0xFFF44336)
@@ -76,21 +77,21 @@ fun EnhancedFinancialChart(
                     value = animatedIncome,
                     color = Color(0xFF4CAF50),
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
-                    prefix = "৳"
+                    prefix = CurrencyManager.symbol()
                 )
                 EnhancedFinanceItem(
                     label = "Expenses",
                     value = animatedExpense,
                     color = Color(0xFFF44336),
                     icon = Icons.Default.BarChart,
-                    prefix = "৳"
+                    prefix = CurrencyManager.symbol()
                 )
                 EnhancedFinanceItem(
                     label = "Savings",
                     value = savings,
                     color = Color(0xFF2196F3),
                     icon = Icons.Default.Savings,
-                    prefix = "৳"
+                    prefix = CurrencyManager.symbol()
                 )
             }
 

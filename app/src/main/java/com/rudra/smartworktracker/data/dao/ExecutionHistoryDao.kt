@@ -3,6 +3,7 @@ package com.rudra.smartworktracker.data.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Upsert
 import com.rudra.smartworktracker.data.entity.ExecutionHistoryEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -22,4 +23,7 @@ interface ExecutionHistoryDao {
 
     @Query("DELETE FROM execution_history")
     suspend fun deleteAll()
+
+    @Upsert
+    suspend fun upsert(entry: ExecutionHistoryEntity)
 }

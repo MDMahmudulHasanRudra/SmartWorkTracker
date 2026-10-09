@@ -86,11 +86,12 @@ fun FinancialStatementScreen(
             state = datePickerState,
             onDismiss = { showDatePickerRange = false },
             onConfirm = {
+                // Picker values are UTC midnights; reading them in the local zone shifts the day west of UTC
                 val start = datePickerState.selectedStartDateMillis?.let {
-                    Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
                 }
                 val end = datePickerState.selectedEndDateMillis?.let {
-                    Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate()
                 }
                 if (start != null && end != null) {
                     viewModel.setDateRange(start, end)
@@ -121,7 +122,8 @@ fun FinancialStatementScreen(
                     }
                 },
                 startDate = uiState.startDate,
-                endDate = uiState.endDate
+                endDate = uiState.endDate,
+                onClearDateRange = { viewModel.setDateRange(null, null) }
             )
 
             if (uiState.isLoading) {
@@ -166,7 +168,8 @@ fun FilterSection(
     selectedFilter: TransactionFilter,
     onFilterSelected: (TransactionFilter) -> Unit,
     startDate: LocalDate?,
-    endDate: LocalDate?
+    endDate: LocalDate?,
+    onClearDateRange: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
@@ -175,7 +178,7 @@ fun FilterSection(
         ) {
             TransactionFilter.values().forEach { filter ->
                 FilterChip(
-                    selected = selectedFilter == filter,
+                    selected = selectedFilter == filter || (filter == TransactionFilter.DATE_RANGE && startDate != null),
                     onClick = { onFilterSelected(filter) },
                     label = { Text(filter.displayName) },
                     leadingIcon = if (selectedFilter == filter) {
@@ -199,11 +202,11 @@ fun FilterSection(
                     Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "${startDate} to ${endDate}",
+                        text = "${startDate.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy"))} – ${endDate.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy"))}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = { onFilterSelected(TransactionFilter.ALL) }, modifier = Modifier.size(24.dp)) {
+                    IconButton(onClick = onClearDateRange, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
                     }
                 }

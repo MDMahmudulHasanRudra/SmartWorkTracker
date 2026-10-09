@@ -1,132 +1,128 @@
 package com.rudra.smartworktracker.ui.screens.backup
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.*
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.rudra.smartworktracker.data.backup.AutoBackupWorker
 import com.rudra.smartworktracker.data.backup.BackupManager
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.rudra.smartworktracker.data.backup.BackupSummary
+import com.rudra.smartworktracker.data.repository.SettingsRepository
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.Calendar
-import java.util.concurrent.TimeUnit
 
-class BackupViewModel(private val context: Context) : ViewModel() {
+data class PendingRestore(val uri: Uri, val summary: BackupSummary)
 
-    private val backupManager = BackupManager(context)
-    private val prefs = context.getSharedPreferences("backup_prefs", Context.MODE_PRIVATE)
+/**
+ * Backup screen state. The auto-backup switch is the same DataStore setting the worker and the
+ * Settings screen use (this screen used to keep its own SharedPreferences flag that the worker
+ * never read, so turning it on here did nothing).
+ */
+class BackupViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val context: Context get() = getApplication()
+    private val backupManager = BackupManager(application)
+    private val settingsRepository = SettingsRepository(application)
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val workManager = WorkManager.getInstance(application)
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _backupResult = MutableSharedFlow<BackupResult>()
+    private val _backupResult = MutableSharedFlow<BackupResult>(extraBufferCapacity = 4)
     val backupResult: SharedFlow<BackupResult> = _backupResult.asSharedFlow()
 
     private val _lastBackupTime = MutableStateFlow(0L)
     val lastBackupTime: StateFlow<Long> = _lastBackupTime.asStateFlow()
 
-    private val _nextBackupTime = MutableStateFlow(0L)
-    val nextBackupTime: StateFlow<Long> = _nextBackupTime.asStateFlow()
+    private val _lastAutoBackupTime = MutableStateFlow(0L)
+    val lastAutoBackupTime: StateFlow<Long> = _lastAutoBackupTime.asStateFlow()
 
-    private val _isAutoBackupEnabled = MutableStateFlow(false)
-    val isAutoBackupEnabled: StateFlow<Boolean> = _isAutoBackupEnabled.asStateFlow()
+    private val _pendingRestore = MutableStateFlow<PendingRestore?>(null)
+    val pendingRestore: StateFlow<PendingRestore?> = _pendingRestore.asStateFlow()
+
+    val isAutoBackupEnabled: StateFlow<Boolean> = settingsRepository.autoBackup
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Next run of the periodic worker, straight from WorkManager. */
+    val nextBackupTime: StateFlow<Long> = workManager.getWorkInfosForUniqueWorkFlow(AutoBackupWorker.UNIQUE_WORK_NAME)
+        .map { infos ->
+            infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED }?.nextScheduleTimeMillis
+                ?.takeIf { it != Long.MAX_VALUE } ?: 0L
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     init {
         loadBackupStatus()
-    }
-
-    fun loadBackupStatus() {
-        _lastBackupTime.value = prefs.getLong("last_auto_backup_time", 0L)
-        _isAutoBackupEnabled.value = prefs.getBoolean("auto_backup_enabled", false)
-
-        if (_isAutoBackupEnabled.value) {
-            calculateNextBackupTime()
-        } else {
-            _nextBackupTime.value = 0L
-        }
-    }
-
-    private fun calculateNextBackupTime() {
-        val nextBackup = Calendar.getInstance()
-        nextBackup.set(Calendar.HOUR_OF_DAY, 0)
-        nextBackup.set(Calendar.MINUTE, 5)
-        nextBackup.set(Calendar.SECOND, 0)
-
-        if (nextBackup.before(Calendar.getInstance())) {
-            nextBackup.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        _nextBackupTime.value = nextBackup.timeInMillis
-    }
-
-    fun toggleAutoBackup(enabled: Boolean) {
+        // Refresh "last backup" when a "back up now" run finishes
         viewModelScope.launch {
-            prefs.edit().putBoolean("auto_backup_enabled", enabled).apply()
-            _isAutoBackupEnabled.value = enabled
-
-            if (enabled) {
-                scheduleDailyBackup()
-                calculateNextBackupTime()
-            } else {
-                cancelDailyBackup()
-                _nextBackupTime.value = 0L
+            workManager.getWorkInfosForUniqueWorkFlow(AutoBackupWorker.MANUAL_WORK_NAME).collect { infos ->
+                val info = infos.firstOrNull() ?: return@collect
+                if (info.state.isFinished) {
+                    loadBackupStatus()
+                    if (_isLoading.value) {
+                        _isLoading.value = false
+                        _backupResult.emit(
+                            if (info.state == WorkInfo.State.SUCCEEDED) BackupResult.Success("Backup saved to Downloads")
+                            else BackupResult.Error("Backup to Downloads failed")
+                        )
+                    }
+                }
             }
         }
     }
 
-    private fun scheduleDailyBackup() {
-        val constraints = Constraints.Builder()
-            .setRequiresStorageNotLow(true)
-            .build()
-
-        val currentDate = Calendar.getInstance()
-        val dueDate = Calendar.getInstance()
-        dueDate.set(Calendar.HOUR_OF_DAY, 0)
-        dueDate.set(Calendar.MINUTE, 5)
-        dueDate.set(Calendar.SECOND, 0)
-
-        if (dueDate.before(currentDate)) {
-            dueDate.add(Calendar.HOUR_OF_DAY, 24)
-        }
-
-        val initialDelay = dueDate.timeInMillis - currentDate.timeInMillis
-
-        val dailyBackupRequest = PeriodicWorkRequestBuilder<AutoBackupWorker>(24, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
-            .addTag("daily_backup")
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "daily_backup_work",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            dailyBackupRequest
-        )
+    fun loadBackupStatus() {
+        val auto = prefs.getLong(AutoBackupWorker.KEY_LAST_AUTO_BACKUP, 0L)
+        val manual = prefs.getLong(KEY_LAST_MANUAL_BACKUP, 0L)
+        _lastAutoBackupTime.value = auto
+        _lastBackupTime.value = maxOf(auto, manual)
     }
 
-    private fun cancelDailyBackup() {
-        WorkManager.getInstance(context).cancelUniqueWork("daily_backup_work")
+    fun toggleAutoBackup(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAutoBackup(enabled)
+            // The periodic worker is always scheduled (see SmartWorkTrackerApplication);
+            // make sure it exists in case it was cancelled by an older version
+            if (enabled) AutoBackupWorker.schedule(context, replace = false)
+        }
+    }
+
+    /** Writes a backup to Downloads right away, whether or not daily backups are on. */
+    fun backupNowToDownloads() {
+        if (_isLoading.value) return
+        _isLoading.value = true
+        val request = OneTimeWorkRequestBuilder<AutoBackupWorker>()
+            .setInputData(workDataOf(AutoBackupWorker.KEY_FORCE to true))
+            .build()
+        workManager.enqueueUniqueWork(
+            AutoBackupWorker.MANUAL_WORK_NAME,
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            request
+        )
     }
 
     fun createBackup(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    val success = backupManager.exportToJson(outputStream)
-                    if (success) {
-                        _backupResult.emit(BackupResult.Success("Manual backup created successfully"))
-                        loadBackupStatus()
-                    } else {
-                        _backupResult.emit(BackupResult.Error("Failed to create backup"))
-                    }
-                } ?: run {
-                    _backupResult.emit(BackupResult.Error("Could not open output stream"))
+                val stream = context.contentResolver.openOutputStream(uri)
+                if (stream == null) {
+                    _backupResult.emit(BackupResult.Error("Couldn't open the selected file"))
+                    return@launch
+                }
+                val success = stream.use { backupManager.exportToJson(it) }
+                if (success) {
+                    prefs.edit().putLong(KEY_LAST_MANUAL_BACKUP, System.currentTimeMillis()).apply()
+                    loadBackupStatus()
+                    _backupResult.emit(BackupResult.Success("Backup file saved"))
+                } else {
+                    _backupResult.emit(BackupResult.Error("Failed to create backup"))
                 }
             } catch (e: Exception) {
                 _backupResult.emit(BackupResult.Error("Backup failed: ${e.localizedMessage}"))
@@ -136,19 +132,49 @@ class BackupViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    /** Reads the picked file first so the confirmation can say what's inside. */
+    fun inspectBackup(uri: Uri) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val summary = context.contentResolver.openInputStream(uri)?.use { backupManager.readSummary(it) }
+                if (summary == null) {
+                    _backupResult.emit(BackupResult.Error("That file isn't a Smart Work Tracker backup"))
+                } else {
+                    _pendingRestore.value = PendingRestore(uri, summary)
+                }
+            } catch (e: Exception) {
+                _backupResult.emit(BackupResult.Error("Couldn't read the file: ${e.localizedMessage}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun cancelRestore() {
+        _pendingRestore.value = null
+    }
+
+    fun confirmRestore() {
+        val pending = _pendingRestore.value ?: return
+        _pendingRestore.value = null
+        restoreBackup(pending.uri)
+    }
+
     fun restoreBackup(uri: Uri) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val result = backupManager.importFromJson(inputStream)
-                    if (result.isSuccess) {
-                        _backupResult.emit(BackupResult.Success("Data restored successfully"))
-                    } else {
-                        _backupResult.emit(BackupResult.Error("Restore failed: ${result.exceptionOrNull()?.message}"))
-                    }
-                } ?: run {
-                    _backupResult.emit(BackupResult.Error("Could not open input stream"))
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream == null) {
+                    _backupResult.emit(BackupResult.Error("Couldn't open the selected file"))
+                    return@launch
+                }
+                val result = stream.use { backupManager.importFromJson(it) }
+                if (result.isSuccess) {
+                    _backupResult.emit(BackupResult.Success("Data restored successfully"))
+                } else {
+                    _backupResult.emit(BackupResult.Error("Restore failed: ${result.exceptionOrNull()?.message}"))
                 }
             } catch (e: Exception) {
                 _backupResult.emit(BackupResult.Error("Restore failed: ${e.localizedMessage}"))
@@ -156,6 +182,11 @@ class BackupViewModel(private val context: Context) : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+
+    companion object {
+        const val PREFS_NAME = "backup_prefs"
+        private const val KEY_LAST_MANUAL_BACKUP = "last_manual_backup_time"
     }
 }
 

@@ -34,5 +34,21 @@ data class AppBackup(
     val creditCardTransactions: List<CreditCardTransaction> = emptyList(),
     val savings: List<Savings> = emptyList(),
     val schedules: List<Schedule> = emptyList(),
-    val meals: List<Meal> = emptyList()
+    val meals: List<Meal> = emptyList(),
+    // Added later; nullable because Gson leaves fields missing from older backup files as null
+    val accounts: List<Account>? = null,
+    val recurringRules: List<RecurringRule>? = null,
+    val recurringTransactions: List<RecurringTransaction>? = null,
+    val billSplits: List<BillSplit>? = null,
+    val realityEntries: List<RealityEntry>? = null,
+    val decisions: List<Decision>? = null,
+    val executionHistory: List<ExecutionHistoryEntity>? = null,
+    // Life plan (Wisdom) and Future Self data
+    val lifePlanGoals: List<Goal>? = null,
+    val lifePlanTargets: List<com.rudra.smartworktracker.model.Target>? = null,
+    val gamificationStats: UserStatsEntity? = null,
+    val checkIns: List<DailyCheckIn>? = null,
+    val consequenceDebts: List<ConsequenceDebt>? = null,
+    val weeklyReports: List<WeeklyReport>? = null,
+    val userHistory: UserHistory? = null
 )

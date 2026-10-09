@@ -1,5 +1,7 @@
 package com.rudra.smartworktracker.ui.screens.analytics
 
+import com.rudra.smartworktracker.model.WorkLog
+import com.rudra.smartworktracker.utils.DateTimeUtils
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rudra.smartworktracker.data.AppDatabase
@@ -87,7 +89,8 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         db.loanDao().getAllLoans(),
         db.emiDao().getAllEmis(),
         db.achievementDao().getAllAchievements(),
-        _selectedPeriod
+        _selectedPeriod,
+        db.workLogDao().getAllWorkLogs()
     ) { args: Array<Any?> ->
         val focusSessions = args[0] as List<FocusSession>
         val habits = args[1] as List<Habit>
@@ -99,6 +102,7 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         val emis = args[7] as List<Emi>
         val achievements = args[8] as List<Achievement>
         val period = args[9] as AnalyticsPeriod
+        val workLogs = args[10] as List<WorkLog>
 
         val today = LocalDate.now()
         val startOfDay = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -117,7 +121,7 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         val waterToday = todaysHealth.filter { it.type == HealthMetricType.WATER }.sumOf { it.value }
         val sleep = todaysHealth.filter { it.type == HealthMetricType.SLEEP }.maxByOrNull { it.timestamp }?.value ?: 0.0
         val calories = todaysHealth.filter { it.type == HealthMetricType.CALORIES }.sumOf { it.value }
-        val steps = todaysHealth.filter { it.type == HealthMetricType.EXERCISE }.sumOf { it.value }.toInt()
+        val steps = todaysHealth.filter { it.type == HealthMetricType.STEPS }.sumOf { it.value }.toInt()
 
         // --- Financial Stats ---
         val periodIncomes = incomes.filter { it.timestamp >= startTimestamp }
@@ -135,10 +139,11 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         val overdueLoans = loans.count { it.isOverdue }
 
         // --- EMI Stats ---
-        val activeEmis = emis.filter { !it.isPaid }
+        // Paid/skipped installments are kept as history rows (inactive), so count active rows only
+        val activeEmis = emis.filter { it.isActive && !it.isPaid }
         val pendingEmis = activeEmis.filter { it.status != EmiStatus.SKIPPED }
         val pendingEmiAmount = pendingEmis.sumOf { it.amount }
-        val overdueEmis = activeEmis.filter { it.nextDueDate < System.currentTimeMillis() && it.status != EmiStatus.PAID }
+        val overdueEmis = activeEmis.filter { it.status == EmiStatus.OVERDUE }
 
         // EMI stats for this month
         val startOfMonth = today.withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -153,7 +158,7 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         val todaysFocusSessions = focusSessions.filter {
             LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), ZoneId.systemDefault()).toLocalDate() == today
         }
-        val totalFocusMinutes = todaysFocusSessions.sumOf { it.duration } / 60
+        val totalFocusMinutes = todaysFocusSessions.sumOf { it.elapsedTime } / 60
 
         val habitPoints = habits.count { it.streak > 0 } * 5
         val healthPoints = if (waterToday >= 2000) 10 else (waterToday / 200).toInt()
@@ -161,11 +166,18 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         val productivityScore = baseScore.coerceIn(0, 100)
 
         // Focus score (based on deep work sessions)
-        val deepWorkMinutes = todaysFocusSessions.filter { it.type == FocusType.DEEP_WORK }.sumOf { it.duration } / 60
+        val deepWorkMinutes = todaysFocusSessions.filter { it.type == FocusType.DEEP_WORK }.sumOf { it.elapsedTime } / 60
         val focusScore = (deepWorkMinutes / 4 * 20).coerceIn(0, 100)
 
-        // --- Work Hours ---
-        val workHours = totalFocusMinutes / 60.0
+        // --- Work Hours --- (today's work log when there is one, otherwise focused time)
+        val todaysLog = workLogs.firstOrNull {
+            it.date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate() == today
+        }
+        val workHours = todaysLog
+            ?.takeIf { it.workType != com.rudra.smartworktracker.model.WorkType.OFF_DAY }
+            ?.let { DateTimeUtils.hoursBetween(it.startTime, it.endTime) }
+            ?.takeIf { it > 0 }
+            ?: (totalFocusMinutes / 60.0)
 
         // --- Work-Life Balance Calculation ---
         val sleepScore = min(100.0, (sleep / 8.0) * 100).toInt()
@@ -194,8 +206,9 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
             healthMetrics.filter { it.timestamp in previousStartTimestamp until startTimestamp }
         )
         val currentProductivity = productivityScore
+        // Float math: the Int version truncated almost every trend to 0% or -100%
         val productivityTrend = if (previousProductivity > 0)
-            ((currentProductivity - previousProductivity) / previousProductivity * 100).toFloat() else 0f
+            (currentProductivity - previousProductivity).toFloat() / previousProductivity * 100f else 0f
 
         // --- Habit Completion Rate ---
         val habitCompletionRate = if (habits.isNotEmpty())
@@ -292,7 +305,7 @@ class AnalyticsViewModel(private val db: AppDatabase) : ViewModel() {
         habits: List<Habit>,
         healthMetrics: List<HealthMetric>
     ): Int {
-        val totalMinutes = sessions.sumOf { it.duration } / 60
+        val totalMinutes = sessions.sumOf { it.elapsedTime } / 60
         val habitPoints = habits.count { it.streak > 0 } * 5
         val waterIntake = healthMetrics.filter { it.type == HealthMetricType.WATER }.sumOf { it.value }
         val healthPoints = if (waterIntake >= 2000) 10 else (waterIntake / 200).toInt()

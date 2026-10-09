@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rudra.smartworktracker.engine.PatternSuggestion
 import com.rudra.smartworktracker.engine.YearlyProjection
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @Composable
 fun InsightsTab(
@@ -113,7 +114,7 @@ fun InsightsTab(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(category, style = MaterialTheme.typography.bodyMedium)
-                                Text("$${String.format("%.0f", amount)} (${String.format("%.0f", percentage)}%)", style = MaterialTheme.typography.bodySmall)
+                                Text("${CurrencyManager.formatWhole(amount)} (${String.format("%.0f", percentage)}%)", style = MaterialTheme.typography.bodySmall)
                             }
                             LinearProgressIndicator(
                                 progress = { percentage / 100f },
@@ -143,14 +144,14 @@ fun InsightsTab(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (yearlyProjection != null) {
-                        InsightRow("Yearly Income", "$${String.format("%.0f", yearlyProjection.totalYearlyIncome)}", Color(0xFF4CAF50))
-                        InsightRow("Yearly Expenses", "$${String.format("%.0f", yearlyProjection.totalYearlyExpenses)}", Color(0xFFFF5252))
+                        InsightRow("Yearly Income", "${CurrencyManager.formatWhole(yearlyProjection.totalYearlyIncome)}", Color(0xFF4CAF50))
+                        InsightRow("Yearly Expenses", "${CurrencyManager.formatWhole(yearlyProjection.totalYearlyExpenses)}", Color(0xFFFF5252))
                         Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         InsightRow(
                             "Net Yearly",
-                            "$${String.format("%.0f", yearlyProjection.netYearly)}",
+                            "${CurrencyManager.formatWhole(yearlyProjection.netYearly)}",
                             if (yearlyProjection.netYearly >= 0) Color(0xFF4CAF50) else Color(0xFFFF5252)
                         )
 
@@ -158,7 +159,7 @@ fun InsightsTab(
                             Spacer(modifier = Modifier.height(12.dp))
                             Text("Expense Breakdown:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                             yearlyProjection.categoryBreakdown.forEach { (category, amount) ->
-                                InsightRow(category, "$${String.format("%.0f", amount)}", MaterialTheme.colorScheme.onSurface)
+                                InsightRow(category, "${CurrencyManager.formatWhole(amount)}", MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -191,7 +192,7 @@ fun InsightsTab(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(text = suggestion.name, fontWeight = FontWeight.Medium)
                             Text(
-                                text = "${suggestion.frequency.name} - $${String.format("%.2f", suggestion.amount)}",
+                                text = "${suggestion.frequency.name} - ${CurrencyManager.format(suggestion.amount)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )

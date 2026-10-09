@@ -69,6 +69,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.rudra.smartworktracker.utils.CurrencyManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -589,7 +590,7 @@ fun PremiumIncomeItem(income: com.rudra.smartworktracker.data.entity.Income) {
                 }
             }
             Text(
-                "\u09F3${income.amount}",
+                "${CurrencyManager.format(income.amount)}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2e7d32)
@@ -648,7 +649,7 @@ fun PremiumExpenseItem(expense: com.rudra.smartworktracker.model.Expense) {
                 }
             }
             Text(
-                "\u09F3${expense.amount}",
+                "${CurrencyManager.format(expense.amount)}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFc62828)

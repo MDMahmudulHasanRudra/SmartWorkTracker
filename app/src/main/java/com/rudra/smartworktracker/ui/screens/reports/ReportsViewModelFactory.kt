@@ -13,8 +13,8 @@ class ReportsViewModelFactory(private val application: Application) : ViewModelP
         if (modelClass.isAssignableFrom(ReportsViewModel::class.java)) {
             val database = AppDatabase.getDatabase(application)
             val workLogRepository = WorkLogRepository(database.workLogDao())
-            val expenseRepository = ExpenseRepository(database.expenseDao())
-            val incomeRepository = IncomeRepository(database.incomeDao())
+            val expenseRepository = ExpenseRepository(database.expenseDao(), database.accountDao())
+            val incomeRepository = IncomeRepository(database.incomeDao(), database.accountDao())
             @Suppress("UNCHECKED_CAST")
             return ReportsViewModel(workLogRepository, expenseRepository, incomeRepository) as T
         }

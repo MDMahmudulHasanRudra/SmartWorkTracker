@@ -8,6 +8,7 @@ import com.rudra.smartworktracker.model.WorkType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
@@ -26,25 +27,31 @@ class MonthlyReportViewModel(private val workLogRepository: WorkLogRepository) :
     private val _uiState = MutableStateFlow(MonthlyReportUiState())
     val uiState: StateFlow<MonthlyReportUiState> = _uiState.asStateFlow()
 
-    private val calendar = Calendar.getInstance()
-    val months = (0..11).map {
-        calendar.set(Calendar.MONTH, it)
-        calendar.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())!!
+    // java.time avoids the lenient-Calendar bug where setting MONTH on the 29th-31st
+    // rolled into the next month (e.g. "March" listed twice, "February" missing)
+    val months: List<String> = java.time.Month.entries.map {
+        it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault())
     }
+
+    private var collectJob: Job? = null
 
     init {
         val currentMonth = months[Calendar.getInstance().get(Calendar.MONTH)]
         onMonthSelected(currentMonth)
     }
 
+    /** Shows the selected month of the current year (logs from other years are excluded). */
     fun onMonthSelected(month: String) {
-        viewModelScope.launch {
-            val monthIndex = months.indexOf(month)
+        val monthIndex = months.indexOf(month).takeIf { it >= 0 } ?: return
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        // One collector at a time; older ones kept overwriting the state with their month
+        collectJob?.cancel()
+        collectJob = viewModelScope.launch {
             workLogRepository.getAllWorkLogs().collect { allLogs ->
                 val filteredLogs = allLogs.filter {
                     val logCalendar = Calendar.getInstance()
                     logCalendar.time = it.date
-                    logCalendar.get(Calendar.MONTH) == monthIndex
+                    logCalendar.get(Calendar.MONTH) == monthIndex && logCalendar.get(Calendar.YEAR) == year
                 }
                 _uiState.value = MonthlyReportUiState(
                     selectedMonth = month,
@@ -52,7 +59,7 @@ class MonthlyReportViewModel(private val workLogRepository: WorkLogRepository) :
                     officeCount = filteredLogs.count { it.workType == WorkType.OFFICE },
                     homeCount = filteredLogs.count { it.workType == WorkType.HOME_OFFICE },
                     offCount = filteredLogs.count { it.workType == WorkType.OFF_DAY },
-                    extraCount = filteredLogs.count { it.workType == WorkType.EXTRA_WORK }
+                    extraCount = filteredLogs.count { it.workType == WorkType.EXTRA_WORK || it.workType == WorkType.OVERTIME }
                 )
             }
         }
